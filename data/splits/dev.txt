@@ -1,9 +1,0 @@
-animal_elephant
-animal_eagle
-object_toothbrush
-object_umbrella
-person_abraham_lincoln
-food_pizza
-object_bicycle
-object_laptop
-place_paris

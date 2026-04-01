@@ -42,16 +42,16 @@ GPT-5.4 achieves the highest solve rate. Gemini 3.1 Flash Lite solves games in t
 
 16 targets across 6 domains:
 
-| Domain | Examples |
-|--------|----------|
+| Domain | Targets |
+|--------|---------|
 | animals | elephant, eagle, octopus |
 | characters | Sherlock Holmes |
-| foods | pizza, kimchi |
-| objects | umbrella, toothbrush |
-| people | Marie Curie |
-| places | Paris, Busan, Tokyo, Sahara Desert |
+| foods | pizza |
+| objects | toothbrush, refrigerator, umbrella, bicycle, laptop, violin |
+| people | Marie Curie, Abraham Lincoln |
+| places | Paris, Busan, volcano |
 
-Target records are defined in [`data/targets/all_targets.csv`](data/targets/all_targets.csv) following [`schemas/target.schema.json`](schemas/target.schema.json). Benchmark splits live in [`data/splits/`](data/splits/).
+Target records are defined in [`data/all_target.csv`](data/all_target.csv) following [`schemas/target.schema.json`](schemas/target.schema.json).
 
 ## Quick Start
 
@@ -77,11 +77,10 @@ python3 -m twentyq.run_single_game \
   --judge-model gemini-3-flash-preview
 ```
 
-### Run a Benchmark Split
+### Run a Benchmark
 
 ```bash
 python3 -m twentyq.run_benchmark \
-  --split test \
   --budget 80 \
   --guesser-model gemini-2.5-flash \
   --judge-model gemini-3-flash-preview
@@ -130,8 +129,7 @@ twentyq/
   plot_model_overview.py          # model performance scatter plot
 
 data/
-  targets/all_targets.csv    # target records
-  splits/dev.txt, test.txt   # benchmark splits
+  all_target.csv             # target records
 
 configs/single_target_suites/ # suite configuration files
 prompts/                      # guesser & judge prompt templates

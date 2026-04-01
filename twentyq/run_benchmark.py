@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .data import load_split, load_targets
+from .data import load_data
 from .env import load_dotenv
 from .episode_runner import (
     DEFAULT_GUESSER_MODEL,
@@ -22,13 +22,13 @@ from .episode_runner import (
 from .prompts import ROOT
 
 
-DEFAULT_SPLIT = "test"
+
 DEFAULT_BUDGET = 80
 
 
 @dataclass
 class BenchmarkConfig:
-    split: str
+
     budget: int
     guesser_model: str
     judge_model: str
@@ -47,12 +47,11 @@ def _default_benchmark_dir(config: BenchmarkConfig) -> Path:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     slug = config.guesser_model.replace("/", "-")
     guesser_provider = provider_for_model(config.guesser_model)
-    return ROOT / "reports" / f"{guesser_provider}-benchmark" / f"{stamp}__{guesser_provider}__{config.split}__budget{config.budget}__{slug}"
+    return ROOT / "reports" / f"{guesser_provider}-benchmark" / f"{stamp}__{guesser_provider}__budget{config.budget}__{slug}"
 
 
 def parse_args() -> BenchmarkConfig:
-    parser = argparse.ArgumentParser(description="Run a sequential Gemini benchmark over a split.")
-    parser.add_argument("--split", default=DEFAULT_SPLIT, help="Split name under data/splits without extension.")
+    parser = argparse.ArgumentParser(description="Run a sequential Gemini benchmark.")
     parser.add_argument("--budget", type=int, default=DEFAULT_BUDGET, help="Maximum turns per target.")
     parser.add_argument("--guesser-model", default=DEFAULT_GUESSER_MODEL, help="Guesser model id.")
     parser.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL, help="Judge model id.")
@@ -83,7 +82,6 @@ def parse_args() -> BenchmarkConfig:
     parser.add_argument("--benchmark-dir", type=Path, default=None, help="Optional benchmark output directory.")
     args = parser.parse_args()
     return BenchmarkConfig(
-        split=args.split,
         budget=_validate_budget(args.budget),
         guesser_model=args.guesser_model,
         judge_model=args.judge_model,
@@ -109,7 +107,6 @@ def _initial_status(config: BenchmarkConfig, targets: list[dict[str, Any]], benc
         "started_at": _utc_now(),
         "updated_at": _utc_now(),
         "completed_at": None,
-        "split": config.split,
         "budget": config.budget,
         "guesser_provider": guesser_provider,
         "guesser_model": config.guesser_model,
@@ -143,7 +140,6 @@ def _aggregate(config: BenchmarkConfig, benchmark_dir: Path, results: list[dict[
     return {
         "benchmark_dir": str(benchmark_dir),
         "completed_at": _utc_now(),
-        "split": config.split,
         "budget": config.budget,
         "guesser_provider": guesser_provider,
         "guesser_model": config.guesser_model,
@@ -163,8 +159,8 @@ def main() -> int:
     config = parse_args()
     load_dotenv(ROOT / ".env")
     benchmark_dir = config.benchmark_dir or _default_benchmark_dir(config)
-    targets_by_id = load_targets(ROOT / "data" / "targets")
-    split_targets = load_split(ROOT / "data" / "splits" / f"{config.split}.txt", targets_by_id)
+    data_path = ROOT / "data" / "all_target.csv"
+    targets = load_data(data_path)
     benchmark_dir.mkdir(parents=True, exist_ok=True)
 
     guesser_reasoning = _validate_reasoning_config(
@@ -183,22 +179,21 @@ def main() -> int:
     manifest = {
         "created_at": _utc_now(),
         "mode": "full-game-benchmark",
-        "split": config.split,
         "budget": config.budget,
         "guesser_provider": provider_for_model(config.guesser_model),
         "guesser_model": config.guesser_model,
         "judge_provider": provider_for_model(config.judge_model),
         "judge_model": config.judge_model,
-        "targets": [target["id"] for target in split_targets],
+        "targets": [target["id"] for target in targets],
     }
     _write_json(benchmark_dir / "manifest.json", manifest)
 
-    status = _initial_status(config, split_targets, benchmark_dir)
+    status = _initial_status(config, targets, benchmark_dir)
     _write_json(benchmark_dir / "status.json", status)
 
     results: list[dict[str, Any]] = []
     runs_dir = benchmark_dir / "runs"
-    for index, target in enumerate(split_targets):
+    for index, target in enumerate(targets):
         status["current_target_id"] = target["id"]
         status["current_run_id"] = None
         status["current_turn"] = 0
