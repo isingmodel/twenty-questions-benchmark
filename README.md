@@ -2,7 +2,7 @@
 
 A multi-turn benchmark that evaluates how efficiently LLMs can identify a hidden target through yes/no questions -- the classic game of Twenty Questions, played between AI models.
 
-One **stateful guesser** asks questions. One **stateless judge** answers `Yes`, `No`, or `Ambiguous`. The game is solved when the guesser correctly identifies the target.
+One LLM guesser asks questions. One LLM judge answers `Yes`, `No`, or `Ambiguous`. The game is solved when the guesser correctly identifies the target.
 
 ![Model Performance Overview](img/model_overview.png)
 
@@ -34,8 +34,6 @@ GPT-5.4 achieves the highest solve rate. Gemini 3.1 Flash Lite solves games in t
        |<-- {"label":"Yes"} -------|  => SOLVED in 3 turns
 ```
 
-- The guesser is stateful across turns via provider-native server-side context (Gemini `previous_interaction_id`, OpenAI `previous_response_id`).
-- The judge is stateless -- it sees only the hidden target record and the current question each turn.
 - There is no separate "final guess" phase. The guesser wins by asking a direct identity-check question that the judge confirms.
 
 ## Targets
@@ -160,7 +158,7 @@ Suite runs additionally produce `manifest.json`, `results.json`, `aggregate.json
 - [Scoring](docs/scoring.md) -- metrics and aggregation
 - [Dataset Schema](docs/dataset-schema.md) -- target record format
 - [Logging](docs/logging.md) -- output format details
-- [Multi-turn Design](docs/multiturn-design.md) -- stateful guesser architecture
+- [Multi-turn Design](docs/multiturn-design.md) -- guesser architecture
 - [Protocol Modes](docs/protocol-modes.md) -- game mode variants
 
 ## License
