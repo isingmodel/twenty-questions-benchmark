@@ -1,0 +1,37 @@
+{
+  "suite_name": "evaluation_v3",
+  "targets": [
+    "person_abraham_lincoln",
+    "person_marie_curie",
+    "character_sherlock_holmes",
+    "place_busan",
+    "place_paris",
+    "object_umbrella",
+    "object_toothbrush",
+    "animal_octopus",
+    "animal_elephant"
+  ],
+  "budget": 80,
+  "repetitions": 20,
+  "judge_model": "gpt-5.4-mini",
+  "guesser_reasoning_effort": "low",
+  "judge_reasoning_effort": "low",
+  "variants": [
+    {
+      "label": "gpt-5.4",
+      "guesser_model": "gpt-5.4"
+    },
+    {
+      "label": "gpt-5.4-mini",
+      "guesser_model": "gpt-5.4-mini"
+    },
+    {
+      "label": "gemini-3.1-flash-lite",
+      "guesser_model": "gemini-3.1-flash-lite-preview"
+    },
+    {
+      "label": "gemini-3.0-flash",
+      "guesser_model": "gemini-3-flash-preview"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+id,name,domain,aliases,description
+animal_elephant,elephant,animals,an elephant,A large land mammal with a trunk.
+animal_eagle,eagle,animals,an eagle,A bird of prey known for sharp vision.
+animal_octopus,octopus,animals,an octopus,An eight-armed marine animal.
+character_sherlock_holmes,Sherlock Holmes,characters,Holmes,A fictional detective created by Arthur Conan Doyle.
+food_pizza,pizza,foods,a pizza,"A baked dish with dough, sauce, cheese, and toppings."
+object_toothbrush,toothbrush,objects,a toothbrush,A hand-held tool used to clean teeth.
+object_refrigerator,refrigerator,objects,a refrigerator|a fridge,A household appliance used to keep food cold.
+object_umbrella,umbrella,objects,an umbrella,A portable object used for protection from rain.
+object_bicycle,bicycle,objects,a bicycle|a bike,A human-powered vehicle with two wheels.
+object_laptop,laptop,objects,a laptop|a notebook computer,A portable personal computer.
+object_violin,violin,objects,a violin,A bowed string instrument used in music.
+person_marie_curie,Marie Curie,people,curie,A physicist and chemist known for pioneering research on radioactivity.
+person_abraham_lincoln,Abraham Lincoln,people,lincoln,The 16th president of the United States.
+place_paris,Paris,places,the city of Paris,The capital city of France.
+place_busan,Busan,places,the city of Busan|부산,A major port city in South Korea.
+place_volcano,volcano,places,a volcano,"A geological landform that can erupt lava, ash, and gas."

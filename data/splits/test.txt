@@ -1,0 +1,6 @@
+animal_octopus
+object_refrigerator
+person_marie_curie
+object_violin
+place_volcano
+character_sherlock_holmes

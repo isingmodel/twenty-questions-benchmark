@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Twenty Questions Target",
+  "type": "object",
+  "required": ["id", "name", "domain", "aliases", "description"],
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "domain": { "type": "string" },
+    "aliases": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "description": { "type": "string" }
+  },
+  "additionalProperties": false
+}

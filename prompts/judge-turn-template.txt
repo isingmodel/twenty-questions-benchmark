@@ -1,0 +1,9 @@
+Hidden target: {{target}}
+
+Current question:
+{{question}}
+
+Return exactly one JSON object with:
+- `reason`: a short grounded explanation
+- `label`: `Yes`, `No`, or `Ambiguous`
+
