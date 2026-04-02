@@ -8,6 +8,7 @@ from pathlib import Path
 from twentyq.run_single_target_suite import (
     ModelVariant,
     SingleTargetSuiteConfig,
+    _default_suite_dir,
     aggregate_results,
     load_suite_config,
     render_report,
@@ -136,6 +137,21 @@ class SingleTargetSuiteTests(unittest.TestCase):
 
         self.assertIn("# Single-Target Suite Report: suite", report)
         self.assertIn("| place_paris | gemini-3.0-flash | gemini-3-flash-preview |", report)
+
+    def test_default_suite_dir_omits_target_ids_from_folder_name(self) -> None:
+        config = SingleTargetSuiteConfig(
+            suite_name="evaluation_v3_claude",
+            target_ids=("place_busan", "animal_octopus"),
+            budget=80,
+            output_dir=None,
+            variants=(),
+        )
+
+        path = _default_suite_dir(config)
+
+        self.assertIn("__evaluation_v3_claude__budget80", path.name)
+        self.assertNotIn("place_busan", path.name)
+        self.assertNotIn("animal_octopus", path.name)
 
 
 if __name__ == "__main__":

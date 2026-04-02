@@ -60,8 +60,8 @@ def _sanitize_fragment(value: str) -> str:
 
 def _default_suite_dir(config: SingleTargetSuiteConfig) -> Path:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    target_slug = "-".join(_sanitize_fragment(target_id) for target_id in config.target_ids)
-    return DEFAULT_OUTPUT_PARENT / f"{stamp}__{_sanitize_fragment(config.suite_name)}__{target_slug}__budget{config.budget}"
+    suite_slug = _sanitize_fragment(config.suite_name)
+    return DEFAULT_OUTPUT_PARENT / f"{stamp}__{suite_slug}__budget{config.budget}"
 
 
 def _require_string(value: Any, field_name: str) -> str:

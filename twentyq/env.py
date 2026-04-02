@@ -25,3 +25,11 @@ def get_required_env(name: str) -> str:
         return value
     raise RuntimeError(f"Missing required environment variable: {name}")
 
+
+def get_required_env_any(*names: str) -> str:
+    for name in names:
+        value = os.environ.get(name)
+        if value:
+            return value
+    joined = ", ".join(names)
+    raise RuntimeError(f"Missing required environment variable: one of {joined}")

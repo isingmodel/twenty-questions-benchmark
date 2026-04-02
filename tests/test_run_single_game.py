@@ -107,6 +107,18 @@ class FullGameHelpersTests(unittest.TestCase):
         reasoning = _validate_reasoning_config("Guesser", "claude-sonnet-4-20250514", None, 2048)
         self.assertEqual(reasoning, ReasoningConfig(thinking_budget=2048))
 
+    def test_validate_reasoning_config_allows_claude_opus_46_thinking_budget(self) -> None:
+        reasoning = _validate_reasoning_config("Guesser", "claude-opus-4-6", None, 2048)
+        self.assertEqual(reasoning, ReasoningConfig(thinking_budget=2048))
+
+    def test_validate_reasoning_config_allows_claude_sonnet_45_thinking_budget(self) -> None:
+        reasoning = _validate_reasoning_config("Guesser", "claude-sonnet-4-5", None, 2048)
+        self.assertEqual(reasoning, ReasoningConfig(thinking_budget=2048))
+
+    def test_validate_reasoning_config_rejects_claude_35_budget_even_with_new_aliases(self) -> None:
+        with self.assertRaisesRegex(ValueError, "does not support extended thinking budgets"):
+            _validate_reasoning_config("Guesser", "claude-3-5-haiku-20241022", None, 2048)
+
     def test_validate_reasoning_config_rejects_claude_thinking_level(self) -> None:
         with self.assertRaisesRegex(ValueError, "uses thinking budgets"):
             _validate_reasoning_config("Guesser", "claude-sonnet-4-20250514", "low", None)
@@ -156,6 +168,10 @@ class FullGameHelpersTests(unittest.TestCase):
 
     def test_resolve_reasoning_effort_maps_claude_effort_to_budget(self) -> None:
         reasoning = resolve_reasoning_effort("claude-sonnet-4-20250514", "medium")
+        self.assertEqual(reasoning, ReasoningConfig(thinking_budget=8192))
+
+    def test_resolve_reasoning_effort_maps_claude_opus_46_effort_to_budget(self) -> None:
+        reasoning = resolve_reasoning_effort("claude-opus-4-6", "medium")
         self.assertEqual(reasoning, ReasoningConfig(thinking_budget=8192))
 
     def test_validate_budget_rejects_non_positive_values(self) -> None:

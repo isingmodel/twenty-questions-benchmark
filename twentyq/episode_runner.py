@@ -16,7 +16,7 @@ from .clients import (
     OpenAIClient,
     OpenAIResponsesSession,
 )
-from .env import get_required_env
+from .env import get_required_env, get_required_env_any
 from .prompts import ROOT, load_prompt, render_template
 from .reasoning import ReasoningConfig
 from .run_logs import RunLogger
@@ -76,6 +76,97 @@ CLAUDE_THINKING_BUDGET_BY_EFFORT = {
     "medium": 8192,
     "high": 24576,
 }
+OPENAI_REASONING_EFFORT_IDENTITY = {
+    "minimal": "minimal",
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+}
+
+
+@dataclass(frozen=True)
+class ModelReasoningCapability:
+    provider: str
+    prefixes: tuple[str, ...]
+    supports_thinking_level: bool
+    supports_thinking_budget: bool
+    supported_levels: tuple[str, ...] | None = None
+    min_thinking_budget: int | None = None
+    effort_to_level: dict[str, str] | None = None
+    effort_to_budget: dict[str, int] | None = None
+
+
+MODEL_PROVIDER_PREFIXES = (
+    (PROVIDER, ("gemini-",)),
+    (OPENAI_PROVIDER, ("gpt-", "o1", "o3", "o4", "codex-")),
+    (ANTHROPIC_PROVIDER, ("claude-",)),
+)
+
+MODEL_REASONING_CAPABILITIES = (
+    ModelReasoningCapability(
+        provider=OPENAI_PROVIDER,
+        prefixes=("gpt-", "o1", "o3", "o4", "codex-"),
+        supports_thinking_level=True,
+        supports_thinking_budget=False,
+        supported_levels=THINKING_LEVEL_CHOICES,
+        effort_to_level=OPENAI_REASONING_EFFORT_IDENTITY,
+    ),
+    ModelReasoningCapability(
+        provider=ANTHROPIC_PROVIDER,
+        prefixes=("claude-opus-4", "claude-sonnet-4", "claude-3-7-sonnet"),
+        supports_thinking_level=False,
+        supports_thinking_budget=True,
+        min_thinking_budget=1024,
+        effort_to_budget=CLAUDE_THINKING_BUDGET_BY_EFFORT,
+    ),
+    ModelReasoningCapability(
+        provider=PROVIDER,
+        prefixes=("gemini-2.5-flash-lite", "gemini-2.5-flash"),
+        supports_thinking_level=True,
+        supports_thinking_budget=True,
+        supported_levels=THINKING_LEVEL_CHOICES,
+        effort_to_level=GEMINI_25_FLASH_THINKING_LEVEL_BY_EFFORT,
+    ),
+    ModelReasoningCapability(
+        provider=PROVIDER,
+        prefixes=("gemini-2.5-pro",),
+        supports_thinking_level=True,
+        supports_thinking_budget=True,
+        effort_to_level=GEMINI_25_PRO_THINKING_LEVEL_BY_EFFORT,
+    ),
+    ModelReasoningCapability(
+        provider=PROVIDER,
+        prefixes=("gemini-3.1-flash-lite",),
+        supports_thinking_level=True,
+        supports_thinking_budget=False,
+        supported_levels=THINKING_LEVEL_CHOICES,
+        effort_to_level=GEMINI_3_FLASH_THINKING_LEVEL_BY_EFFORT,
+    ),
+    ModelReasoningCapability(
+        provider=PROVIDER,
+        prefixes=("gemini-3-flash",),
+        supports_thinking_level=True,
+        supports_thinking_budget=False,
+        supported_levels=THINKING_LEVEL_CHOICES,
+        effort_to_level=GEMINI_3_FLASH_THINKING_LEVEL_BY_EFFORT,
+    ),
+    ModelReasoningCapability(
+        provider=PROVIDER,
+        prefixes=("gemini-3.1-pro",),
+        supports_thinking_level=True,
+        supports_thinking_budget=False,
+        supported_levels=("low", "medium", "high"),
+        effort_to_level=GEMINI_31_PRO_THINKING_LEVEL_BY_EFFORT,
+    ),
+    ModelReasoningCapability(
+        provider=PROVIDER,
+        prefixes=("gemini-3-pro",),
+        supports_thinking_level=True,
+        supports_thinking_budget=False,
+        supported_levels=("low", "high"),
+        effort_to_level=GEMINI_3_PRO_THINKING_LEVEL_BY_EFFORT,
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -102,14 +193,36 @@ def _utc_now() -> str:
 
 
 def provider_for_model(model: str) -> str:
-    normalized = model.strip().lower()
-    if normalized.startswith("gemini-"):
-        return PROVIDER
-    if normalized.startswith(("gpt-", "o1", "o3", "o4", "codex-")):
-        return OPENAI_PROVIDER
-    if normalized.startswith("claude-"):
-        return ANTHROPIC_PROVIDER
+    normalized = _normalize_model_name(model)
+    for provider, prefixes in MODEL_PROVIDER_PREFIXES:
+        if _matches_any_prefix(normalized, prefixes):
+            return provider
     raise ValueError(f"Unsupported model provider for model {model!r}")
+
+
+def _normalize_model_name(model: str) -> str:
+    return model.strip().lower()
+
+
+def _matches_any_prefix(normalized_model: str, prefixes: tuple[str, ...]) -> bool:
+    return normalized_model.startswith(prefixes)
+
+
+def _find_reasoning_capability(model: str) -> ModelReasoningCapability | None:
+    normalized = _normalize_model_name(model)
+    for capability in MODEL_REASONING_CAPABILITIES:
+        if _matches_any_prefix(normalized, capability.prefixes):
+            return capability
+    return None
+
+
+def _format_supported_levels(levels: tuple[str, ...]) -> str:
+    if len(levels) == 1:
+        return f"'{levels[0]}'"
+    if len(levels) == 2:
+        return f"'{levels[0]}' and '{levels[1]}'"
+    head = ", ".join(f"'{level}'" for level in levels[:-1])
+    return f"{head}, and '{levels[-1]}'"
 
 
 def _create_gemini_client() -> GeminiClient:
@@ -117,18 +230,12 @@ def _create_gemini_client() -> GeminiClient:
 
 
 def _create_openai_client() -> OpenAIClient:
-    try:
-        api_key = get_required_env("OPENAI_API_KEY")
-    except RuntimeError:
-        api_key = get_required_env("openai_key")
+    api_key = get_required_env_any("OPENAI_API_KEY", "openai_key")
     return OpenAIClient(api_key)
 
 
 def _create_anthropic_client() -> AnthropicClient:
-    try:
-        api_key = get_required_env("ANTHROPIC_API_KEY")
-    except RuntimeError:
-        api_key = get_required_env("anthropic_key")
+    api_key = get_required_env_any("CLAUDE_API_KEY", "ANTHROPIC_API_KEY", "anthropic_key")
     return AnthropicClient(api_key)
 
 
@@ -322,14 +429,15 @@ def _validate_reasoning_config(
     if thinking_budget is not None and thinking_budget < 0:
         raise ValueError(f"{role} thinking budget must be non-negative, got {thinking_budget}")
 
-    normalized_model = model.strip().lower()
     provider = provider_for_model(model)
+    capability = _find_reasoning_capability(model)
     if provider == OPENAI_PROVIDER:
         if thinking_budget is not None:
             raise ValueError(f"{role} model {model!r} does not support thinking budgets")
         if thinking_level is None:
             return ReasoningConfig()
-        if thinking_level not in THINKING_LEVEL_CHOICES:
+        supported_levels = capability.supported_levels if capability is not None else THINKING_LEVEL_CHOICES
+        if supported_levels is not None and thinking_level not in supported_levels:
             raise ValueError(f"{role} model {model!r} has unsupported thinking level {thinking_level!r}")
         return ReasoningConfig(reasoning_effort=thinking_level)
     if provider == ANTHROPIC_PROVIDER:
@@ -337,34 +445,22 @@ def _validate_reasoning_config(
             raise ValueError(f"{role} model {model!r} uses thinking budgets, not thinking levels")
         if thinking_budget is None:
             return ReasoningConfig()
-        if thinking_budget < 1024:
-            raise ValueError(f"{role} model {model!r} requires thinking budgets of at least 1024 tokens")
-        if not _anthropic_model_supports_thinking(model):
+        if capability is None or not capability.supports_thinking_budget:
             raise ValueError(f"{role} model {model!r} does not support extended thinking budgets")
+        min_budget = capability.min_thinking_budget or 0
+        if thinking_budget < min_budget:
+            raise ValueError(f"{role} model {model!r} requires thinking budgets of at least 1024 tokens")
         return ReasoningConfig(thinking_budget=thinking_budget)
-    if normalized_model.startswith("gemini-3") and thinking_budget is not None:
-        raise ValueError(f"{role} model {model!r} uses thinking levels, not thinking budgets")
-    if normalized_model.startswith("gemini-3-pro") and thinking_level not in {None, "low", "high"}:
-        raise ValueError(f"{role} model {model!r} only supports thinking levels 'low' and 'high'")
-    if normalized_model.startswith("gemini-3.1-pro") and thinking_level not in {None, "low", "medium", "high"}:
-        raise ValueError(f"{role} model {model!r} only supports thinking levels 'low', 'medium', and 'high'")
-    if (
-        normalized_model.startswith("gemini-3-flash")
-        or normalized_model.startswith("gemini-3.1-flash-lite")
-    ) and thinking_level not in {None, *THINKING_LEVEL_CHOICES}:
-        raise ValueError(f"{role} model {model!r} has unsupported thinking level {thinking_level!r}")
+
+    if capability is not None:
+        if thinking_budget is not None and not capability.supports_thinking_budget:
+            raise ValueError(f"{role} model {model!r} uses thinking levels, not thinking budgets")
+        if thinking_level is not None and not capability.supports_thinking_level:
+            raise ValueError(f"{role} model {model!r} does not support thinking levels")
+        if capability.supported_levels is not None and thinking_level not in {None, *capability.supported_levels}:
+            supported_text = _format_supported_levels(capability.supported_levels)
+            raise ValueError(f"{role} model {model!r} only supports thinking levels {supported_text}")
     return ReasoningConfig(thinking_level=thinking_level, thinking_budget=thinking_budget)
-
-
-def _anthropic_model_supports_thinking(model: str) -> bool:
-    normalized = model.strip().lower()
-    return normalized.startswith(
-        (
-            "claude-sonnet-4",
-            "claude-opus-4",
-            "claude-3-7-sonnet",
-        )
-    )
 
 
 def _reasoning_to_payload(reasoning: ReasoningConfig) -> dict[str, Any]:
@@ -379,23 +475,6 @@ def _reasoning_to_payload(reasoning: ReasoningConfig) -> dict[str, Any]:
 
 
 def resolve_reasoning_effort(model: str, effort: str | None, role: str = "Model") -> ReasoningConfig:
-    provider = provider_for_model(model)
-    if provider == OPENAI_PROVIDER:
-        if effort is None:
-            return ReasoningConfig()
-        normalized_effort = effort.strip().lower()
-        if normalized_effort not in REASONING_EFFORT_CHOICES:
-            raise ValueError(f"Unsupported reasoning effort {effort!r}")
-        return ReasoningConfig(reasoning_effort=normalized_effort)
-    if provider == ANTHROPIC_PROVIDER:
-        if effort is None:
-            return ReasoningConfig()
-        normalized_effort = effort.strip().lower()
-        if normalized_effort not in REASONING_EFFORT_CHOICES:
-            raise ValueError(f"Unsupported reasoning effort {effort!r}")
-        if not _anthropic_model_supports_thinking(model):
-            raise ValueError(f"Unsupported model family for reasoning effort mapping: {model!r}")
-        return ReasoningConfig(thinking_budget=CLAUDE_THINKING_BUDGET_BY_EFFORT[normalized_effort])
     if effort is None:
         return ReasoningConfig()
 
@@ -403,55 +482,22 @@ def resolve_reasoning_effort(model: str, effort: str | None, role: str = "Model"
     if normalized_effort not in REASONING_EFFORT_CHOICES:
         raise ValueError(f"Unsupported reasoning effort {effort!r}")
 
-    normalized_model = model.strip().lower()
-    if normalized_model.startswith("gemini-2.5-flash-lite"):
+    capability = _find_reasoning_capability(model)
+    if capability is None:
+        raise ValueError(f"Unsupported model family for reasoning effort mapping: {model!r}")
+    if capability.effort_to_level is not None:
         return _validate_reasoning_config(
             role=role,
             model=model,
-            thinking_level=GEMINI_25_FLASH_THINKING_LEVEL_BY_EFFORT[normalized_effort],
+            thinking_level=capability.effort_to_level[normalized_effort],
             thinking_budget=None,
         )
-    if normalized_model.startswith("gemini-2.5-flash"):
+    if capability.effort_to_budget is not None:
         return _validate_reasoning_config(
             role=role,
             model=model,
-            thinking_level=GEMINI_25_FLASH_THINKING_LEVEL_BY_EFFORT[normalized_effort],
-            thinking_budget=None,
-        )
-    if normalized_model.startswith("gemini-2.5-pro"):
-        return _validate_reasoning_config(
-            role=role,
-            model=model,
-            thinking_level=GEMINI_25_PRO_THINKING_LEVEL_BY_EFFORT[normalized_effort],
-            thinking_budget=None,
-        )
-    if normalized_model.startswith("gemini-3.1-flash-lite"):
-        return _validate_reasoning_config(
-            role=role,
-            model=model,
-            thinking_level=GEMINI_3_FLASH_THINKING_LEVEL_BY_EFFORT[normalized_effort],
-            thinking_budget=None,
-        )
-    if normalized_model.startswith("gemini-3-flash"):
-        return _validate_reasoning_config(
-            role=role,
-            model=model,
-            thinking_level=GEMINI_3_FLASH_THINKING_LEVEL_BY_EFFORT[normalized_effort],
-            thinking_budget=None,
-        )
-    if normalized_model.startswith("gemini-3.1-pro"):
-        return _validate_reasoning_config(
-            role=role,
-            model=model,
-            thinking_level=GEMINI_31_PRO_THINKING_LEVEL_BY_EFFORT[normalized_effort],
-            thinking_budget=None,
-        )
-    if normalized_model.startswith("gemini-3-pro"):
-        return _validate_reasoning_config(
-            role=role,
-            model=model,
-            thinking_level=GEMINI_3_PRO_THINKING_LEVEL_BY_EFFORT[normalized_effort],
-            thinking_budget=None,
+            thinking_level=None,
+            thinking_budget=capability.effort_to_budget[normalized_effort],
         )
     raise ValueError(f"Unsupported model family for reasoning effort mapping: {model!r}")
 
