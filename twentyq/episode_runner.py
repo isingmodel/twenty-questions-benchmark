@@ -8,6 +8,8 @@ from time import perf_counter
 from typing import Any
 
 from .clients import (
+    AnthropicClient,
+    AnthropicMessagesSession,
     GeminiClient,
     GeminiInteractionSession,
     HTTPError,
@@ -22,6 +24,7 @@ from .run_logs import RunLogger
 
 PROVIDER = "gemini"
 OPENAI_PROVIDER = "openai"
+ANTHROPIC_PROVIDER = "anthropic"
 THINKING_LEVEL_CHOICES = ("minimal", "low", "medium", "high")
 REASONING_EFFORT_CHOICES = ("minimal", "low", "medium", "high")
 DEFAULT_TARGET_ID = "object_toothbrush"
@@ -67,6 +70,12 @@ GEMINI_31_PRO_THINKING_LEVEL_BY_EFFORT = {
     "medium": "medium",
     "high": "high",
 }
+CLAUDE_THINKING_BUDGET_BY_EFFORT = {
+    "minimal": 1024,
+    "low": 2048,
+    "medium": 8192,
+    "high": 24576,
+}
 
 
 @dataclass(frozen=True)
@@ -98,6 +107,8 @@ def provider_for_model(model: str) -> str:
         return PROVIDER
     if normalized.startswith(("gpt-", "o1", "o3", "o4", "codex-")):
         return OPENAI_PROVIDER
+    if normalized.startswith("claude-"):
+        return ANTHROPIC_PROVIDER
     raise ValueError(f"Unsupported model provider for model {model!r}")
 
 
@@ -113,11 +124,21 @@ def _create_openai_client() -> OpenAIClient:
     return OpenAIClient(api_key)
 
 
+def _create_anthropic_client() -> AnthropicClient:
+    try:
+        api_key = get_required_env("ANTHROPIC_API_KEY")
+    except RuntimeError:
+        api_key = get_required_env("anthropic_key")
+    return AnthropicClient(api_key)
+
+
 def _create_client_for_model(model: str) -> Any:
     provider = provider_for_model(model)
     if provider == PROVIDER:
         return _create_gemini_client()
-    return _create_openai_client()
+    if provider == OPENAI_PROVIDER:
+        return _create_openai_client()
+    return _create_anthropic_client()
 
 
 def _create_guesser_session(client: Any, model: str, system_prompt: str, initial_user_prompt: str) -> Any:
@@ -129,7 +150,14 @@ def _create_guesser_session(client: Any, model: str, system_prompt: str, initial
             system_prompt=system_prompt,
             initial_user_prompt=initial_user_prompt,
         )
-    return OpenAIResponsesSession(
+    if provider == OPENAI_PROVIDER:
+        return OpenAIResponsesSession(
+            client=client,
+            model=model,
+            system_prompt=system_prompt,
+            initial_user_prompt=initial_user_prompt,
+        )
+    return AnthropicMessagesSession(
         client=client,
         model=model,
         system_prompt=system_prompt,
@@ -295,7 +323,8 @@ def _validate_reasoning_config(
         raise ValueError(f"{role} thinking budget must be non-negative, got {thinking_budget}")
 
     normalized_model = model.strip().lower()
-    if provider_for_model(model) == OPENAI_PROVIDER:
+    provider = provider_for_model(model)
+    if provider == OPENAI_PROVIDER:
         if thinking_budget is not None:
             raise ValueError(f"{role} model {model!r} does not support thinking budgets")
         if thinking_level is None:
@@ -303,6 +332,16 @@ def _validate_reasoning_config(
         if thinking_level not in THINKING_LEVEL_CHOICES:
             raise ValueError(f"{role} model {model!r} has unsupported thinking level {thinking_level!r}")
         return ReasoningConfig(reasoning_effort=thinking_level)
+    if provider == ANTHROPIC_PROVIDER:
+        if thinking_level is not None:
+            raise ValueError(f"{role} model {model!r} uses thinking budgets, not thinking levels")
+        if thinking_budget is None:
+            return ReasoningConfig()
+        if thinking_budget < 1024:
+            raise ValueError(f"{role} model {model!r} requires thinking budgets of at least 1024 tokens")
+        if not _anthropic_model_supports_thinking(model):
+            raise ValueError(f"{role} model {model!r} does not support extended thinking budgets")
+        return ReasoningConfig(thinking_budget=thinking_budget)
     if normalized_model.startswith("gemini-3") and thinking_budget is not None:
         raise ValueError(f"{role} model {model!r} uses thinking levels, not thinking budgets")
     if normalized_model.startswith("gemini-3-pro") and thinking_level not in {None, "low", "high"}:
@@ -317,6 +356,17 @@ def _validate_reasoning_config(
     return ReasoningConfig(thinking_level=thinking_level, thinking_budget=thinking_budget)
 
 
+def _anthropic_model_supports_thinking(model: str) -> bool:
+    normalized = model.strip().lower()
+    return normalized.startswith(
+        (
+            "claude-sonnet-4",
+            "claude-opus-4",
+            "claude-3-7-sonnet",
+        )
+    )
+
+
 def _reasoning_to_payload(reasoning: ReasoningConfig) -> dict[str, Any]:
     payload: dict[str, Any] = {}
     if reasoning.thinking_level is not None:
@@ -329,13 +379,23 @@ def _reasoning_to_payload(reasoning: ReasoningConfig) -> dict[str, Any]:
 
 
 def resolve_reasoning_effort(model: str, effort: str | None, role: str = "Model") -> ReasoningConfig:
-    if provider_for_model(model) == OPENAI_PROVIDER:
+    provider = provider_for_model(model)
+    if provider == OPENAI_PROVIDER:
         if effort is None:
             return ReasoningConfig()
         normalized_effort = effort.strip().lower()
         if normalized_effort not in REASONING_EFFORT_CHOICES:
             raise ValueError(f"Unsupported reasoning effort {effort!r}")
         return ReasoningConfig(reasoning_effort=normalized_effort)
+    if provider == ANTHROPIC_PROVIDER:
+        if effort is None:
+            return ReasoningConfig()
+        normalized_effort = effort.strip().lower()
+        if normalized_effort not in REASONING_EFFORT_CHOICES:
+            raise ValueError(f"Unsupported reasoning effort {effort!r}")
+        if not _anthropic_model_supports_thinking(model):
+            raise ValueError(f"Unsupported model family for reasoning effort mapping: {model!r}")
+        return ReasoningConfig(thinking_budget=CLAUDE_THINKING_BUDGET_BY_EFFORT[normalized_effort])
     if effort is None:
         return ReasoningConfig()
 
@@ -492,9 +552,12 @@ def run_full_game_episode(
             (
                 guesser_raw_output,
                 guesser_user_prompt,
-                guesser_interaction_id,
-                guesser_previous_interaction_id,
+                guesser_request_id,
+                guesser_previous_request_id,
             ) = guesser_result
+            guesser_call_metadata = {}
+            if hasattr(guesser_session, "last_call_metadata"):
+                guesser_call_metadata = dict(getattr(guesser_session, "last_call_metadata"))
             logger.log_event(
                 {
                     "ts": _utc_now(),
@@ -511,8 +574,9 @@ def run_full_game_episode(
                     "turn_prompt": turn_prompt,
                     "raw_output": guesser_raw_output,
                     "generation_config": _reasoning_to_payload(config.guesser_reasoning),
-                    "interaction_id": guesser_interaction_id,
-                    "previous_interaction_id": guesser_previous_interaction_id,
+                    "request_id": guesser_request_id,
+                    "previous_request_id": guesser_previous_request_id,
+                    **guesser_call_metadata,
                 }
             )
 
@@ -567,8 +631,9 @@ def run_full_game_episode(
                     "judge_raw_output": judge_raw_output,
                     "guesser_session_mode": guesser_session.session_mode,
                     "judge_session_mode": judge_session_mode,
-                    "guesser_interaction_id": guesser_interaction_id,
-                    "guesser_previous_interaction_id": guesser_previous_interaction_id,
+                    "guesser_request_id": guesser_request_id,
+                    "guesser_previous_request_id": guesser_previous_request_id,
+                    **guesser_call_metadata,
                     "is_identity_question": is_identity_question,
                 }
             )

@@ -51,7 +51,7 @@ def _default_benchmark_dir(config: BenchmarkConfig) -> Path:
 
 
 def parse_args() -> BenchmarkConfig:
-    parser = argparse.ArgumentParser(description="Run a sequential Gemini benchmark.")
+    parser = argparse.ArgumentParser(description="Run a sequential benchmark across supported providers.")
     parser.add_argument("--budget", type=int, default=DEFAULT_BUDGET, help="Maximum turns per target.")
     parser.add_argument("--guesser-model", default=DEFAULT_GUESSER_MODEL, help="Guesser model id.")
     parser.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL, help="Judge model id.")
@@ -59,25 +59,25 @@ def parse_args() -> BenchmarkConfig:
         "--guesser-thinking-level",
         choices=THINKING_LEVEL_CHOICES,
         default=None,
-        help="Gemini 3 reasoning level for the guesser.",
+        help="Reasoning level for level-based models (for example Gemini 3 or OpenAI effort mapping).",
     )
     parser.add_argument(
         "--judge-thinking-level",
         choices=THINKING_LEVEL_CHOICES,
         default=None,
-        help="Gemini 3 reasoning level for the judge.",
+        help="Reasoning level for level-based models (for example Gemini 3 or OpenAI effort mapping).",
     )
     parser.add_argument(
         "--guesser-thinking-budget",
         type=int,
         default=None,
-        help="Gemini 2.5 thinking budget for the guesser.",
+        help="Thinking budget for budget-based models (for example Gemini 2.5 or Claude thinking models).",
     )
     parser.add_argument(
         "--judge-thinking-budget",
         type=int,
         default=None,
-        help="Gemini 2.5 thinking budget for the judge.",
+        help="Thinking budget for budget-based models (for example Gemini 2.5 or Claude thinking models).",
     )
     parser.add_argument("--benchmark-dir", type=Path, default=None, help="Optional benchmark output directory.")
     args = parser.parse_args()

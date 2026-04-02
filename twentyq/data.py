@@ -70,7 +70,24 @@ def _normalize_target_record(record: dict[str, Any], source: str) -> dict[str, A
         }
     )
     return normalized
+
+
+def _resolve_data_path(data_path: Path) -> Path:
+    if data_path.is_file():
+        return data_path
+    candidates = [
+        data_path / "targets.csv",
+        data_path / "all_target.csv",
+        data_path.parent / "all_target.csv",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(f"Could not find targets CSV for {data_path}")
+
+
 def load_data(data_path: Path) -> list[dict[str, Any]]:
+    data_path = _resolve_data_path(data_path)
     targets: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     with data_path.open("r", encoding="utf-8", newline="") as handle:
@@ -90,3 +107,7 @@ def load_data(data_path: Path) -> list[dict[str, Any]]:
             seen_ids.add(target_id)
             targets.append(record)
     return targets
+
+
+def load_targets(data_path: Path) -> dict[str, dict[str, Any]]:
+    return {target["id"]: target for target in load_data(data_path)}

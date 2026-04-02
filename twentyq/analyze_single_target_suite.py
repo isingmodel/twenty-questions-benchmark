@@ -13,7 +13,7 @@ from .data import load_targets
 from .prompts import ROOT
 
 
-DEFAULT_REPORTS_ROOT = ROOT / "reports" / "gemini-single-target-suite"
+DEFAULT_REPORTS_ROOT = ROOT / "reports" / "single-target-suite"
 DEFAULT_OUTPUT_DIR = DEFAULT_REPORTS_ROOT / "benchmark-analysis"
 
 
@@ -571,7 +571,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--targets-dir",
         type=Path,
-        default=ROOT / "data" / "targets",
+        default=ROOT / "data" / "all_target.csv",
         help="Directory containing target CSV files.",
     )
     parser.add_argument(

@@ -63,6 +63,7 @@ Create a `.env` file:
 ```
 gemini_key=...
 OPENAI_API_KEY=...
+ANTHROPIC_API_KEY=...
 ```
 
 ### Run a Single Game
@@ -80,7 +81,8 @@ python3 -m twentyq.run_single_game \
 ```bash
 python3 -m twentyq.run_benchmark \
   --budget 80 \
-  --guesser-model gemini-2.5-flash \
+  --guesser-model claude-sonnet-4-20250514 \
+  --guesser-thinking-budget 2048 \
   --judge-model gemini-3-flash-preview
 ```
 

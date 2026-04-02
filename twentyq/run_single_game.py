@@ -21,7 +21,7 @@ from .prompts import ROOT
 
 
 def parse_args() -> FullGameConfig:
-    parser = argparse.ArgumentParser(description="Run a logged single-target Twenty Questions game on Gemini.")
+    parser = argparse.ArgumentParser(description="Run a logged single-target Twenty Questions game.")
     parser.add_argument("--target-id", default=DEFAULT_TARGET_ID, help="Target id to use for the test game.")
     parser.add_argument("--budget", type=int, default=DEFAULT_BUDGET, help="Maximum number of turns before stopping.")
     parser.add_argument("--guesser-model", default=DEFAULT_GUESSER_MODEL, help="Model id for the guesser.")
@@ -30,25 +30,25 @@ def parse_args() -> FullGameConfig:
         "--guesser-thinking-level",
         choices=THINKING_LEVEL_CHOICES,
         default=None,
-        help="Gemini 3 reasoning level for the guesser.",
+        help="Reasoning level for level-based models (for example Gemini 3 or OpenAI effort mapping).",
     )
     parser.add_argument(
         "--judge-thinking-level",
         choices=THINKING_LEVEL_CHOICES,
         default=None,
-        help="Gemini 3 reasoning level for the judge.",
+        help="Reasoning level for level-based models (for example Gemini 3 or OpenAI effort mapping).",
     )
     parser.add_argument(
         "--guesser-thinking-budget",
         type=int,
         default=None,
-        help="Gemini 2.5 thinking budget for the guesser.",
+        help="Thinking budget for budget-based models (for example Gemini 2.5 or Claude thinking models).",
     )
     parser.add_argument(
         "--judge-thinking-budget",
         type=int,
         default=None,
-        help="Gemini 2.5 thinking budget for the judge.",
+        help="Thinking budget for budget-based models (for example Gemini 2.5 or Claude thinking models).",
     )
     parser.add_argument("--run-dir", type=Path, default=None, help="Optional run directory root.")
     args = parser.parse_args()
@@ -76,7 +76,7 @@ def parse_args() -> FullGameConfig:
 def main() -> int:
     config = parse_args()
     load_dotenv(ROOT / ".env")
-    targets = load_targets(ROOT / "data" / "targets")
+    targets = load_targets(ROOT / "data" / "all_target.csv")
     if config.target_id not in targets:
         print(f"ERROR: unknown target id {config.target_id!r}")
         return 1

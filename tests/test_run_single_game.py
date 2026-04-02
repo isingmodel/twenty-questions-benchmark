@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from twentyq.episode_runner import (
+    ANTHROPIC_PROVIDER,
     JUDGMENT_AMBIGUOUS,
     JUDGMENT_FALSE,
     JUDGMENT_TRUE,
@@ -73,9 +74,10 @@ class FullGameHelpersTests(unittest.TestCase):
         target = {"name": "Abraham Lincoln", "aliases": ["lincoln"]}
         self.assertTrue(_is_identity_question("Is it LINCOLN?!", target))
 
-    def test_provider_for_model_detects_gemini_and_openai(self) -> None:
+    def test_provider_for_model_detects_gemini_openai_and_anthropic(self) -> None:
         self.assertEqual(provider_for_model("gemini-3-flash-preview"), PROVIDER)
         self.assertEqual(provider_for_model("gpt-5"), OPENAI_PROVIDER)
+        self.assertEqual(provider_for_model("claude-sonnet-4-20250514"), ANTHROPIC_PROVIDER)
 
     def test_validate_reasoning_config_rejects_mixed_level_and_budget(self) -> None:
         with self.assertRaisesRegex(ValueError, "cannot set both thinking level and thinking budget"):
@@ -100,6 +102,18 @@ class FullGameHelpersTests(unittest.TestCase):
     def test_validate_reasoning_config_maps_gpt_thinking_level_to_reasoning_effort(self) -> None:
         reasoning = _validate_reasoning_config("Guesser", "gpt-5", "low", None)
         self.assertEqual(reasoning, ReasoningConfig(reasoning_effort="low"))
+
+    def test_validate_reasoning_config_allows_claude_thinking_budget(self) -> None:
+        reasoning = _validate_reasoning_config("Guesser", "claude-sonnet-4-20250514", None, 2048)
+        self.assertEqual(reasoning, ReasoningConfig(thinking_budget=2048))
+
+    def test_validate_reasoning_config_rejects_claude_thinking_level(self) -> None:
+        with self.assertRaisesRegex(ValueError, "uses thinking budgets"):
+            _validate_reasoning_config("Guesser", "claude-sonnet-4-20250514", "low", None)
+
+    def test_validate_reasoning_config_rejects_claude_budget_on_non_thinking_model(self) -> None:
+        with self.assertRaisesRegex(ValueError, "does not support extended thinking budgets"):
+            _validate_reasoning_config("Guesser", "claude-3-5-haiku-20241022", None, 2048)
 
     def test_reasoning_payload_omits_empty_values(self) -> None:
         self.assertEqual(_reasoning_to_payload(ReasoningConfig()), {})
@@ -139,6 +153,10 @@ class FullGameHelpersTests(unittest.TestCase):
     def test_resolve_reasoning_effort_maps_openai_effort(self) -> None:
         reasoning = resolve_reasoning_effort("gpt-5", "high")
         self.assertEqual(reasoning, ReasoningConfig(reasoning_effort="high"))
+
+    def test_resolve_reasoning_effort_maps_claude_effort_to_budget(self) -> None:
+        reasoning = resolve_reasoning_effort("claude-sonnet-4-20250514", "medium")
+        self.assertEqual(reasoning, ReasoningConfig(thinking_budget=8192))
 
     def test_validate_budget_rejects_non_positive_values(self) -> None:
         with self.assertRaisesRegex(ValueError, "Budget must be positive"):

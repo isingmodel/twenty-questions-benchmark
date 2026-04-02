@@ -22,7 +22,7 @@ from .episode_runner import (
 from .prompts import ROOT
 
 
-DEFAULT_OUTPUT_PARENT = ROOT / "reports" / "gemini-single-target-suite"
+DEFAULT_OUTPUT_PARENT = ROOT / "reports" / "single-target-suite"
 
 
 @dataclass(frozen=True)
@@ -351,7 +351,7 @@ def main() -> int:
     suite_dir = args.suite_dir or config.output_dir or _default_suite_dir(config)
     suite_dir.mkdir(parents=True, exist_ok=True)
 
-    targets_by_id = load_targets(ROOT / "data" / "targets")
+    targets_by_id = load_targets(ROOT / "data" / "all_target.csv")
     missing_targets = [target_id for target_id in config.target_ids if target_id not in targets_by_id]
     if missing_targets:
         raise ValueError(f"Unknown target ids in suite config: {missing_targets!r}")
