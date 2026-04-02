@@ -95,7 +95,7 @@ This writes a timestamped suite directory under `reports/single-target-suite/`.
 ### Run Cross-Suite Analysis
 
 ```bash
-python3 -m twentyq.analyze_single_target_suite --completed-only
+python3 -m analysis.analyze_single_target_suite --completed-only
 ```
 
 This writes:
@@ -106,7 +106,7 @@ This writes:
 ### Regenerate the Overview Plot
 
 ```bash
-python3 -m twentyq.plot_model_overview
+python3 -m analysis.plot_model_overview
 ```
 
 By default this reads `reports/single-target-suite/benchmark-analysis/aggregate.json` and writes `img/model_overview.png`.
@@ -166,6 +166,8 @@ twentyq/
   run_single_game.py              # single-target CLI
   run_benchmark.py                # one-pass benchmark runner
   run_single_target_suite.py      # repeated suite runner
+
+analysis/
   analyze_single_target_suite.py  # cross-suite aggregation
   plot_model_overview.py          # overview scatter plot
 

@@ -10,24 +10,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-# ---------------------------------------------------------------------------
-# Paths resolved relative to the repository root
-# ---------------------------------------------------------------------------
-
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 DEFAULT_INPUT_PATH = _REPO_ROOT / "reports" / "single-target-suite" / "benchmark-analysis" / "aggregate.json"
 DEFAULT_OUTPUT_PATH = _REPO_ROOT / "img" / "model_overview.png"
-
-# ---------------------------------------------------------------------------
-# Visual style mappings
-# ---------------------------------------------------------------------------
 
 LABEL_MAP: dict[str, str] = {
     "gpt-5.4": "GPT-5.4",
     "gpt-5.4-mini": "GPT-5.4 Mini",
     "gemini-3-flash-preview": "Gemini 3 Flash",
     "gemini-3.1-flash-lite-preview": "Gemini 3.1 Flash Lite",
+    "claude-opus-4-6": "Claude Opus 4.6",
+    "claude-sonnet-4-5": "Claude Sonnet 4.5",
+    "claude-3-7-sonnet-20250219": "Claude 3.7 Sonnet",
 }
 
 COLORS: dict[str, str] = {
@@ -35,6 +30,9 @@ COLORS: dict[str, str] = {
     "gpt-5.4-mini": "#7EC8E3",
     "gemini-3-flash-preview": "#E8793A",
     "gemini-3.1-flash-lite-preview": "#F5B041",
+    "claude-opus-4-6": "#2F6B5F",
+    "claude-sonnet-4-5": "#53A08E",
+    "claude-3-7-sonnet-20250219": "#8CC7B8",
 }
 
 MARKERS: dict[str, str] = {
@@ -42,6 +40,9 @@ MARKERS: dict[str, str] = {
     "gpt-5.4-mini": "s",
     "gemini-3-flash-preview": "D",
     "gemini-3.1-flash-lite-preview": "^",
+    "claude-opus-4-6": "P",
+    "claude-sonnet-4-5": "X",
+    "claude-3-7-sonnet-20250219": "v",
 }
 
 
@@ -50,8 +51,10 @@ class PlotRow:
     model_id: str
     label: str
     solve_rate: float
-    avg_turns_solved: float
+    turns_per_success_at_horizon: float
     observed_runs: int
+    solve_rate_stddev: float = 0.0
+    turns_per_success_at_horizon_stddev: float = 0.0
 
 
 def _require_float(value: Any, field_name: str, model_id: str) -> float:
@@ -78,16 +81,32 @@ def build_plot_rows(analysis: dict[str, Any]) -> list[PlotRow]:
         model_id = str(raw_row.get("guesser_model", "")).strip()
         if not model_id:
             continue
-        avg_turns_solved = raw_row.get("avg_turns_solved")
-        if avg_turns_solved is None:
+        turns_per_success_at_horizon = raw_row.get("turns_per_success_at_horizon")
+        if turns_per_success_at_horizon is None:
             continue
         rows.append(
             PlotRow(
                 model_id=model_id,
                 label=LABEL_MAP.get(model_id, model_id),
                 solve_rate=_require_float(raw_row.get("solve_rate"), "solve_rate", model_id),
-                avg_turns_solved=_require_float(avg_turns_solved, "avg_turns_solved", model_id),
+                turns_per_success_at_horizon=_require_float(
+                    turns_per_success_at_horizon,
+                    "turns_per_success_at_horizon",
+                    model_id,
+                ),
                 observed_runs=_require_int(raw_row.get("observed_runs"), "observed_runs", model_id),
+                solve_rate_stddev=max(
+                    0.0,
+                    _require_float(raw_row.get("repetition_solve_rate_stddev", 0.0), "repetition_solve_rate_stddev", model_id),
+                ),
+                turns_per_success_at_horizon_stddev=max(
+                    0.0,
+                    _require_float(
+                        raw_row.get("repetition_turns_per_success_at_horizon_stddev", 0.0) or 0.0,
+                        "repetition_turns_per_success_at_horizon_stddev",
+                        model_id,
+                    ),
+                ),
             )
         )
 
@@ -110,16 +129,18 @@ def _label_offset(model_id: str, index: int) -> tuple[int, int]:
 
 def _axis_limits(rows: list[PlotRow]) -> tuple[float, float, float, float]:
     solve_rates = [row.solve_rate * 100.0 for row in rows]
-    avg_turns = [row.avg_turns_solved for row in rows]
+    turns_per_success = [row.turns_per_success_at_horizon for row in rows]
+    solve_rate_stddevs = [row.solve_rate_stddev * 100.0 for row in rows]
+    turns_per_success_stddevs = [row.turns_per_success_at_horizon_stddev for row in rows]
 
-    x_min = max(0.0, math.floor((min(solve_rates) - 3.0) / 5.0) * 5.0)
-    x_max = min(100.0, math.ceil((max(solve_rates) + 3.0) / 5.0) * 5.0)
+    x_min = max(0.0, math.floor((min(x - e for x, e in zip(solve_rates, solve_rate_stddevs, strict=False)) - 3.0) / 5.0) * 5.0)
+    x_max = min(100.0, math.ceil((max(x + e for x, e in zip(solve_rates, solve_rate_stddevs, strict=False)) + 3.0) / 5.0) * 5.0)
     if x_max <= x_min:
         x_min = max(0.0, x_min - 5.0)
         x_max = min(100.0, x_max + 5.0)
 
-    y_min = max(0.0, math.floor(min(avg_turns) - 1.0))
-    y_max = math.ceil(max(avg_turns) + 1.0)
+    y_min = max(0.0, math.floor(min(y - e for y, e in zip(turns_per_success, turns_per_success_stddevs, strict=False)) - 1.0))
+    y_max = math.ceil(max(y + e for y, e in zip(turns_per_success, turns_per_success_stddevs, strict=False)) + 1.0)
     if y_max <= y_min:
         y_min = max(0.0, y_min - 1.0)
         y_max = y_max + 1.0
@@ -127,7 +148,7 @@ def _axis_limits(rows: list[PlotRow]) -> tuple[float, float, float, float]:
     return x_min, x_max, y_min, y_max
 
 
-def render_plot(rows: list[PlotRow], output_path: Path) -> None:
+def render_plot(rows: list[PlotRow], output_path: Path, *, analysis_turn_horizon: int | None = None) -> None:
     import matplotlib.patheffects as pe
     import matplotlib.pyplot as plt
 
@@ -139,7 +160,7 @@ def render_plot(rows: list[PlotRow], output_path: Path) -> None:
 
     for index, row in enumerate(rows):
         x = row.solve_rate * 100.0
-        y = row.avg_turns_solved
+        y = row.turns_per_success_at_horizon
         color = COLORS.get(row.model_id, "#888888")
         marker = MARKERS.get(row.model_id, "o")
 
@@ -154,8 +175,21 @@ def render_plot(rows: list[PlotRow], output_path: Path) -> None:
             zorder=5,
             label=row.label,
         )
+        if row.solve_rate_stddev > 0.0 or row.turns_per_success_at_horizon_stddev > 0.0:
+            ax.errorbar(
+                x,
+                y,
+                xerr=row.solve_rate_stddev * 100.0 if row.solve_rate_stddev > 0.0 else None,
+                yerr=row.turns_per_success_at_horizon_stddev if row.turns_per_success_at_horizon_stddev > 0.0 else None,
+                fmt="none",
+                ecolor=color,
+                elinewidth=1.2,
+                capsize=3,
+                alpha=0.55,
+                zorder=4,
+            )
 
-        text = f"{row.label}\n({x:.1f}%, {y:.1f}t, n={row.observed_runs})"
+        text = f"{row.label}\n({x:.1f}%, {y:.1f} t/success, n={row.observed_runs})"
         ax.annotate(
             text,
             xy=(x, y),
@@ -172,9 +206,16 @@ def render_plot(rows: list[PlotRow], output_path: Path) -> None:
         )
 
     ax.set_xlabel("Solve Rate (%)", fontsize=13, fontweight="bold")
-    ax.set_ylabel("Avg Turns on Solved Runs (lower = better)", fontsize=13, fontweight="bold")
+    ax.set_ylabel("Turns per Success at Shared Horizon (lower = better)", fontsize=13, fontweight="bold")
+    title_suffix = (
+        f"H = {analysis_turn_horizon} observed turns"
+        if isinstance(analysis_turn_horizon, int) and analysis_turn_horizon > 0
+        else "shared observed solve horizon"
+    )
     ax.set_title(
-        "Twenty Questions Benchmark\nSolve Rate vs Turn Efficiency",
+        "Twenty Questions Benchmark\nSolve Rate vs Horizon-Capped Turns per Success ({suffix}; error bars = repetition variance)".format(
+            suffix=title_suffix
+        ),
         fontsize=14,
         fontweight="bold",
         pad=14,
@@ -208,7 +249,7 @@ def parse_args() -> argparse.Namespace:
         "--input",
         type=Path,
         default=DEFAULT_INPUT_PATH,
-        help="Path to aggregate.json produced by twentyq.analyze_single_target_suite.",
+        help="Path to aggregate.json produced by analysis.analyze_single_target_suite.",
     )
     parser.add_argument(
         "--output",
@@ -223,7 +264,13 @@ def main() -> None:
     args = parse_args()
     analysis = json.loads(args.input.read_text(encoding="utf-8"))
     rows = build_plot_rows(analysis)
-    render_plot(rows, args.output)
+    summary = analysis.get("summary", {})
+    analysis_turn_horizon = summary.get("analysis_turn_horizon")
+    render_plot(
+        rows,
+        args.output,
+        analysis_turn_horizon=analysis_turn_horizon if isinstance(analysis_turn_horizon, int) else None,
+    )
 
 
 if __name__ == "__main__":

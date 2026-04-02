@@ -18,7 +18,7 @@ This creates a timestamped output directory under `reports/single-target-suite/`
 Aggregate completed suites:
 
 ```bash
-python3 -m twentyq.analyze_single_target_suite --completed-only
+python3 -m analysis.analyze_single_target_suite --completed-only
 ```
 
 This writes:
@@ -29,7 +29,7 @@ This writes:
 Regenerate the overview plot:
 
 ```bash
-python3 -m twentyq.plot_model_overview
+python3 -m analysis.plot_model_overview
 ```
 
 By default the plot script reads:
