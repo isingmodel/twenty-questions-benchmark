@@ -15,12 +15,23 @@ class HTTPError(RuntimeError):
     pass
 
 
+class RetriableContentError(HTTPError):
+    """API returned HTTP 200 but content is empty, blocked, or unparseable.
+
+    These failures are often transient (safety filters, server-side load,
+    thinking-only responses) and worth retrying.
+    """
+    pass
+
+
 RETRIABLE_HTTP_CODES = {408, 429, 499, 500, 502, 503, 504}
 DEFAULT_MAX_ATTEMPTS = 4
 DEFAULT_BASE_DELAY_SECONDS = 1.5
 DEFAULT_MAX_JITTER_SECONDS = 0.65
 DEFAULT_PRE_REQUEST_DELAY_SECONDS = 1.5
 RETRY_DELAY_SECONDS = 4.
+CONTENT_RETRY_MAX_ATTEMPTS = 3
+CONTENT_RETRY_DELAY_SECONDS = 3.
 
 
 def _normalize_chat_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -115,17 +126,37 @@ def _build_interaction_generation_config(
     return config
 
 
+def _with_content_retry(
+    fn: Any,
+    max_attempts: int = CONTENT_RETRY_MAX_ATTEMPTS,
+    delay: float = CONTENT_RETRY_DELAY_SECONDS,
+) -> Any:
+    """Retry *fn* on RetriableContentError with back-off.
+
+    Catches only RetriableContentError so that genuine HTTP/network
+    failures (already retried inside _post_json) propagate immediately.
+    """
+    for attempt in range(max_attempts):
+        try:
+            return fn()
+        except RetriableContentError:
+            if attempt < max_attempts - 1:
+                time.sleep(delay * (attempt + 1))
+                continue
+            raise
+
+
 def _extract_interaction_text(interaction: dict[str, Any]) -> str:
     outputs = interaction.get("outputs")
     if not isinstance(outputs, list):
-        raise HTTPError(f"Unexpected Gemini interaction response: {json.dumps(interaction)}")
+        raise RetriableContentError(f"Unexpected Gemini interaction response: {json.dumps(interaction)}")
     for output in reversed(outputs):
         if not isinstance(output, dict):
             continue
         text = output.get("text")
         if isinstance(text, str) and text.strip():
             return text.strip()
-    raise HTTPError(f"Gemini interaction did not return text output: {json.dumps(interaction)}")
+    raise RetriableContentError(f"Gemini interaction did not return text output: {json.dumps(interaction)}")
 
 
 def _extract_openai_response_text(response: dict[str, Any]) -> str:
@@ -135,7 +166,7 @@ def _extract_openai_response_text(response: dict[str, Any]) -> str:
 
     outputs = response.get("output")
     if not isinstance(outputs, list):
-        raise HTTPError(f"Unexpected OpenAI response: {json.dumps(response)}")
+        raise RetriableContentError(f"Unexpected OpenAI response: {json.dumps(response)}")
 
     chunks: list[str] = []
     for item in outputs:
@@ -154,7 +185,7 @@ def _extract_openai_response_text(response: dict[str, Any]) -> str:
                 chunks.append(text.strip())
     if chunks:
         return "\n".join(chunks).strip()
-    raise HTTPError(f"OpenAI response did not return text output: {json.dumps(response)}")
+    raise RetriableContentError(f"OpenAI response did not return text output: {json.dumps(response)}")
 
 
 def _thinking_kwargs_from_reasoning(reasoning: ReasoningConfig | None) -> dict[str, Any]:
@@ -216,19 +247,22 @@ class GeminiClient:
         if system_prompt:
             payload["systemInstruction"] = {"parts": [{"text": system_prompt}]}
 
-        response = _post_json(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-            payload,
-            {"x-goog-api-key": self.api_key},
-        )
-        try:
-            parts = response["candidates"][0]["content"]["parts"]
-            text = "".join(part.get("text", "") for part in parts).strip()
-            if not text:
-                raise KeyError("empty text")
-            return text
-        except (KeyError, IndexError, TypeError) as exc:
-            raise HTTPError(f"Unexpected Gemini response: {json.dumps(response)}") from exc
+        def _do_generate() -> str:
+            response = _post_json(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                payload,
+                {"x-goog-api-key": self.api_key},
+            )
+            try:
+                parts = response["candidates"][0]["content"]["parts"]
+                text = "".join(part.get("text", "") for part in parts).strip()
+                if not text:
+                    raise KeyError("empty text")
+                return text
+            except (KeyError, IndexError, TypeError) as exc:
+                raise RetriableContentError(f"Unexpected Gemini response: {json.dumps(response)}") from exc
+
+        return _with_content_retry(_do_generate)
 
     def create_interaction(
         self,
@@ -252,15 +286,18 @@ class GeminiClient:
         if previous_interaction_id is not None:
             payload["previous_interaction_id"] = previous_interaction_id
 
-        response = _post_json(
-            "https://generativelanguage.googleapis.com/v1beta/interactions",
-            payload,
-            {"x-goog-api-key": self.api_key},
-        )
-        if not isinstance(response, dict) or not response.get("id"):
-            raise HTTPError(f"Unexpected Gemini interaction response: {json.dumps(response)}")
-        _extract_interaction_text(response)
-        return response
+        def _do_interact() -> dict[str, Any]:
+            response = _post_json(
+                "https://generativelanguage.googleapis.com/v1beta/interactions",
+                payload,
+                {"x-goog-api-key": self.api_key},
+            )
+            if not isinstance(response, dict) or not response.get("id"):
+                raise RetriableContentError(f"Unexpected Gemini interaction response: {json.dumps(response)}")
+            _extract_interaction_text(response)  # validates content; raises RetriableContentError
+            return response
+
+        return _with_content_retry(_do_interact)
 
     def extract_interaction_text(self, interaction: dict[str, Any]) -> str:
         return _extract_interaction_text(interaction)
@@ -346,15 +383,18 @@ class OpenAIClient:
         if reasoning_effort is not None:
             payload["reasoning"] = {"effort": reasoning_effort}
 
-        response = _post_json(
-            "https://api.openai.com/v1/responses",
-            payload,
-            {"Authorization": f"Bearer {self.api_key}"},
-        )
-        if not isinstance(response, dict) or not response.get("id"):
-            raise HTTPError(f"Unexpected OpenAI response: {json.dumps(response)}")
-        _extract_openai_response_text(response)
-        return response
+        def _do_respond() -> dict[str, Any]:
+            response = _post_json(
+                "https://api.openai.com/v1/responses",
+                payload,
+                {"Authorization": f"Bearer {self.api_key}"},
+            )
+            if not isinstance(response, dict) or not response.get("id"):
+                raise RetriableContentError(f"Unexpected OpenAI response: {json.dumps(response)}")
+            _extract_openai_response_text(response)  # validates content; raises RetriableContentError
+            return response
+
+        return _with_content_retry(_do_respond)
 
     def extract_response_text(self, response: dict[str, Any]) -> str:
         return _extract_openai_response_text(response)
