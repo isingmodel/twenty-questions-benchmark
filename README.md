@@ -1,27 +1,31 @@
 # Twenty Questions Benchmark
 
-A multi-turn benchmark that evaluates how efficiently LLMs can identify a hidden target through yes/no questions -- the classic game of Twenty Questions, played between AI models.
+A polished multi-turn benchmark for measuring how efficiently LLMs can solve a hidden-target game through yes/no questions.
 
-One LLM guesser asks questions. One LLM judge answers `Yes`, `No`, or `Ambiguous`. The game is solved when the guesser correctly identifies the target.
+One model acts as the guesser. Another acts as the judge. Every run produces full prompts, event logs, transcripts, suite aggregates, and analysis-ready reports, so you can compare models with more visibility than a simple pass/fail leaderboard.
+
+## Why This Repo
+
+- Multi-turn evaluation instead of single-shot QA
+- Cross-provider model comparisons with repeatable suite configs
+- Full prompt and transcript logging for auditability
+- Built-in suite analysis and plotting
+- Small enough to iterate quickly, rich enough to expose search behavior
 
 ![Model Performance Overview](img/model_overview.png)
 
-## Key Results
+The overview plot is generated from local suite analysis output. See [Reproducibility](docs/reproducibility.md) for the exact commands and paths.
 
-309 games across 4 guesser models and 4 targets (as of April 2026):
+## What You Can Do
 
-| Model | Solve Rate | Avg Turns (solved) |
-|-------|----------:|---------:|
-| GPT-5.4 | **98.8%** | 21.3 |
-| Gemini 3.1 Flash Lite | 92.5% | **18.3** |
-| Gemini 3 Flash | 91.3% | 19.1 |
-| GPT-5.4 Mini | 86.2% | 20.2 |
-
-GPT-5.4 achieves the highest solve rate. Gemini 3.1 Flash Lite solves games in the fewest turns. See the [full analysis report](benchmark_analysis/claude_benchmark_analysis/report.md) for per-target breakdowns, confidence intervals, and domain-level patterns.
+- Run a single target game and inspect the full transcript
+- Run repeated evaluation suites across multiple models and targets
+- Aggregate many suite runs into a single benchmark report
+- Regenerate a leaderboard-style overview plot from fresh results
 
 ## How It Works
 
-```
+```text
     Guesser                      Judge
        |                           |
        |--- "Is it a place?" ----->|
@@ -34,7 +38,9 @@ GPT-5.4 achieves the highest solve rate. Gemini 3.1 Flash Lite solves games in t
        |<-- {"label":"Yes"} -------|  => SOLVED in 3 turns
 ```
 
-- There is no separate "final guess" phase. The guesser wins by asking a direct identity-check question that the judge confirms.
+- There is no separate "final guess" phase.
+- The guesser wins by asking a direct identity-check question that the judge confirms.
+- Every turn is logged with prompts, raw outputs, judgments, latency, and transcript artifacts.
 
 ## Targets
 
@@ -49,7 +55,7 @@ GPT-5.4 achieves the highest solve rate. Gemini 3.1 Flash Lite solves games in t
 | people | Marie Curie, Abraham Lincoln |
 | places | Paris, Busan, volcano |
 
-Target records are defined in [`data/all_target.csv`](data/all_target.csv) following [`schemas/target.schema.json`](schemas/target.schema.json).
+Target records live in [`data/all_target.csv`](data/all_target.csv) and are validated against [`schemas/target.schema.json`](schemas/target.schema.json).
 
 ## Quick Start
 
@@ -60,7 +66,7 @@ Target records are defined in [`data/all_target.csv`](data/all_target.csv) follo
 
 Create a `.env` file:
 
-```
+```bash
 gemini_key=...
 OPENAI_API_KEY=...
 ANTHROPIC_API_KEY=...
@@ -76,28 +82,35 @@ python3 -m twentyq.run_single_game \
   --judge-model gemini-3-flash-preview
 ```
 
-### Run a Benchmark
-
-```bash
-python3 -m twentyq.run_benchmark \
-  --budget 80 \
-  --guesser-model claude-sonnet-4-20250514 \
-  --guesser-thinking-budget 2048 \
-  --judge-model gemini-3-flash-preview
-```
-
 ### Run a Repeated Suite
-
-Suite configs define multiple models, targets, and repetitions in a single JSON file:
 
 ```bash
 python3 -m twentyq.run_single_target_suite \
   --config configs/single_target_suites/evaluation_v3.json
 ```
 
-### Reasoning Configuration
+This writes a timestamped suite directory under `reports/single-target-suite/`.
 
-Control thinking budget or reasoning effort per model:
+### Run Cross-Suite Analysis
+
+```bash
+python3 -m twentyq.analyze_single_target_suite --completed-only
+```
+
+This writes:
+
+- `reports/single-target-suite/benchmark-analysis/aggregate.json`
+- `reports/single-target-suite/benchmark-analysis/report.md`
+
+### Regenerate the Overview Plot
+
+```bash
+python3 -m twentyq.plot_model_overview
+```
+
+By default this reads `reports/single-target-suite/benchmark-analysis/aggregate.json` and writes `img/model_overview.png`.
+
+### Reasoning Configuration
 
 ```bash
 python3 -m twentyq.run_single_game \
@@ -109,59 +122,68 @@ python3 -m twentyq.run_single_game \
   --judge-thinking-level low
 ```
 
-### Cross-Suite Analysis
-
-Aggregate results across all suite runs:
-
-```bash
-python3 -m twentyq.analyze_single_target_suite
-```
-
-## Repository Layout
-
-```
-twentyq/
-  episode_runner.py          # shared gameplay engine
-  run_single_game.py         # single-target CLI
-  run_benchmark.py           # split benchmark orchestration
-  run_single_target_suite.py # repeated suite runner
-  analyze_single_target_suite.py  # cross-suite aggregation
-  plot_model_overview.py          # model performance scatter plot
-
-data/
-  all_target.csv             # target records
-
-configs/single_target_suites/ # suite configuration files
-prompts/                      # guesser & judge prompt templates
-schemas/                      # JSON schema for targets
-docs/                         # design docs, protocols, scoring
-reports/                      # run outputs (gitignored)
-benchmark_analysis/           # analysis scripts & reports
-```
-
 ## Output & Logging
 
-Each run produces:
+Each single-game run produces:
 
 | Artifact | Description |
 |----------|-------------|
 | `run_config.json` | Run configuration |
-| `summary.json` | Outcome summary (solved, turns, etc.) |
+| `summary.json` | Outcome summary |
 | `events.jsonl` | Turn-by-turn event log |
-| `episodes/<target>.json` | Full game transcript |
+| `episodes/<target>.json` | Full transcript and metadata |
 | `episodes/<target>.md` | Human-readable transcript |
 
-Suite runs additionally produce `manifest.json`, `results.json`, `aggregate.json`, and `report.md`.
+Suite runs additionally produce:
+
+| Artifact | Description |
+|----------|-------------|
+| `manifest.json` | Planned targets, variants, repetitions, and resolved reasoning settings |
+| `status.json` | Progress and active-run status |
+| `results.json` | Per-run records |
+| `aggregate.json` | Per-target and per-variant aggregates |
+| `report.md` | Markdown summary for the suite |
+
+Cross-suite analysis writes `aggregate.json` and `report.md` under `reports/single-target-suite/benchmark-analysis/`.
+
+## Scope
+
+This repository is best used as a controlled interactive benchmark:
+
+- the prompt scaffold is fixed and intentional
+- results depend on the chosen judge model and judge prompt
+- the target set is explicit and relatively small
+- provider-native multi-turn API behavior is part of what gets measured
+
+That makes the project useful for side-by-side comparisons, regression tracking, and protocol experiments. Results should be read as performance inside this benchmark design, not as a universal ranking of model intelligence.
+
+## Repository Layout
+
+```text
+twentyq/
+  episode_runner.py               # shared gameplay engine
+  run_single_game.py              # single-target CLI
+  run_benchmark.py                # one-pass benchmark runner
+  run_single_target_suite.py      # repeated suite runner
+  analyze_single_target_suite.py  # cross-suite aggregation
+  plot_model_overview.py          # overview scatter plot
+
+configs/single_target_suites/     # suite configuration files
+data/                             # target records
+docs/                             # benchmark scope and reproducibility notes
+img/                              # generated and checked-in images
+project_review/                   # external critique notes and adjudication
+prompts/                          # guesser and judge prompt templates
+reports/                          # generated run outputs (gitignored)
+schemas/                          # target schema
+tests/                            # unit tests
+```
 
 ## Documentation
 
-- [Benchmark Design](docs/benchmark-design.md) -- game structure, solve condition, turn semantics
-- [Judge Protocol](docs/judge-protocol.md) -- how the judge evaluates questions
-- [Scoring](docs/scoring.md) -- metrics and aggregation
-- [Dataset Schema](docs/dataset-schema.md) -- target record format
-- [Logging](docs/logging.md) -- output format details
-- [Multi-turn Design](docs/multiturn-design.md) -- guesser architecture
-- [Protocol Modes](docs/protocol-modes.md) -- game mode variants
+- [Benchmark Design](docs/benchmark-design.md)
+- [Prompt Scaffold](docs/prompt-scaffold.md)
+- [Reproducibility](docs/reproducibility.md)
 
 ## License
 

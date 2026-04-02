@@ -1,15 +1,13 @@
 {
   "suite_name": "evaluation_v3",
   "targets": [
-    "person_abraham_lincoln",
-    "person_marie_curie",
-    "character_sherlock_holmes",
     "place_busan",
-    "place_paris",
+    "animal_octopus",
+    "person_marie_curie",
+    "character_gandalf",
     "object_umbrella",
     "object_toothbrush",
-    "animal_octopus",
-    "animal_elephant"
+    "food_croissant"
   ],
   "budget": 80,
   "repetitions": 20,
