@@ -16,6 +16,42 @@ One model acts as the guesser. Another acts as the judge. Every run produces ful
 
 The overview plot is generated from local suite analysis output. See [Reproducibility](docs/reproducibility.md) for the exact commands and paths.
 
+## C-TQS Metric (Censored Twenty Questions Score)
+
+To evaluate twenty-questions skill without introducing a hard-cap artifact (for example, treating all failures as exactly 80 turns), this repo also supports a **censored time-to-solve metric**:
+
+- Treat each run as `(time = turns_used, event = solved)`.
+- `solved=False` is handled as **right-censored**, not as a true solved time.
+- For each `target_id × guesser_w_effort`, compute a Kaplan-Meier survival curve and its restricted mean questions:
+
+```text
+RMQ(τ) = ∫[0,τ] S(t) dt
+```
+
+where lower RMQ means fewer expected questions within a shared horizon.
+
+Then, per target, convert RMQ into a 0–100 relative score:
+
+```text
+C-TQS(model,target) =
+100 * (RMQ_worst(target) - RMQ_model(target))
+      / (RMQ_worst(target) - RMQ_best(target))
+```
+
+The final C-TQS for a model is the macro-average across targets.
+
+Generate the plot from `results/results.csv`:
+
+```bash
+python3 -m analysis.plot_c_tqs \
+  --input results/results.csv \
+  --output img/c_tqs_model_ranking.png
+```
+
+If Matplotlib is unavailable in the environment, the script automatically writes an SVG fallback at `img/c_tqs_model_ranking.svg`.
+
+![C-TQS Model Ranking](img/c_tqs_model_ranking.svg)
+
 ## What You Can Do
 
 - Run a single target game and inspect the full transcript

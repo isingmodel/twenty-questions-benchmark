@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="604">
+<rect width="100%" height="100%" fill="white"/>
+<text x="600" y="36" text-anchor="middle" font-size="23" font-weight="700">C-TQS by guesser_w_effort</text>
+<text x="600" y="62" text-anchor="middle" font-size="14" fill="#444">Dots: per-target normalized censored efficiency | Diamond: macro average</text>
+<line x1="260.0" y1="90" x2="260.0" y2="524" stroke="#e0e0e0"/>
+<text x="260.0" y="548" text-anchor="middle" font-size="12" fill="#444">0</text>
+<line x1="346.0" y1="90" x2="346.0" y2="524" stroke="#e0e0e0"/>
+<text x="346.0" y="548" text-anchor="middle" font-size="12" fill="#444">10</text>
+<line x1="432.0" y1="90" x2="432.0" y2="524" stroke="#e0e0e0"/>
+<text x="432.0" y="548" text-anchor="middle" font-size="12" fill="#444">20</text>
+<line x1="518.0" y1="90" x2="518.0" y2="524" stroke="#e0e0e0"/>
+<text x="518.0" y="548" text-anchor="middle" font-size="12" fill="#444">30</text>
+<line x1="604.0" y1="90" x2="604.0" y2="524" stroke="#e0e0e0"/>
+<text x="604.0" y="548" text-anchor="middle" font-size="12" fill="#444">40</text>
+<line x1="690.0" y1="90" x2="690.0" y2="524" stroke="#e0e0e0"/>
+<text x="690.0" y="548" text-anchor="middle" font-size="12" fill="#444">50</text>
+<line x1="776.0" y1="90" x2="776.0" y2="524" stroke="#e0e0e0"/>
+<text x="776.0" y="548" text-anchor="middle" font-size="12" fill="#444">60</text>
+<line x1="862.0" y1="90" x2="862.0" y2="524" stroke="#e0e0e0"/>
+<text x="862.0" y="548" text-anchor="middle" font-size="12" fill="#444">70</text>
+<line x1="948.0" y1="90" x2="948.0" y2="524" stroke="#e0e0e0"/>
+<text x="948.0" y="548" text-anchor="middle" font-size="12" fill="#444">80</text>
+<line x1="1034.0" y1="90" x2="1034.0" y2="524" stroke="#e0e0e0"/>
+<text x="1034.0" y="548" text-anchor="middle" font-size="12" fill="#444">90</text>
+<line x1="1120.0" y1="90" x2="1120.0" y2="524" stroke="#e0e0e0"/>
+<text x="1120.0" y="548" text-anchor="middle" font-size="12" fill="#444">100</text>
+<line x1="260" y1="524" x2="1120" y2="524" stroke="#999" stroke-width="1.2"/>
+<text x="690.0" y="580" text-anchor="middle" font-size="14" font-weight="700">C-TQS (higher is better)</text>
+<text x="246" y="126.0" text-anchor="end" font-size="14">claude-opus-4-6_low</text>
+<circle cx="260.0" cy="121.0" r="6.2" fill="#4C78A8" fill-opacity="0.78"/>
+<circle cx="1120.0" cy="121.0" r="6.2" fill="#F58518" fill-opacity="0.78"/>
+<circle cx="1120.0" cy="121.0" r="6.2" fill="#54A24B" fill-opacity="0.78"/>
+<circle cx="996.3" cy="121.0" r="6.2" fill="#E45756" fill-opacity="0.78"/>
+<circle cx="1120.0" cy="121.0" r="6.2" fill="#72B7B2" fill-opacity="0.78"/>
+<circle cx="543.2" cy="121.0" r="6.2" fill="#B279A2" fill-opacity="0.78"/>
+<circle cx="1090.3" cy="121.0" r="6.2" fill="#FF9DA6" fill-opacity="0.78"/>
+<polygon points="892.8,113.0 900.8,121.0 892.8,129.0 884.8,121.0" fill="#111"/>
+<text x="246" y="188.0" text-anchor="end" font-size="14">gemini-3-flash-preview_low</text>
+<circle cx="1080.0" cy="183.0" r="6.2" fill="#4C78A8" fill-opacity="0.78"/>
+<circle cx="1065.7" cy="183.0" r="6.2" fill="#F58518" fill-opacity="0.78"/>
+<circle cx="722.8" cy="183.0" r="6.2" fill="#54A24B" fill-opacity="0.78"/>
+<circle cx="477.9" cy="183.0" r="6.2" fill="#E45756" fill-opacity="0.78"/>
+<circle cx="794.7" cy="183.0" r="6.2" fill="#72B7B2" fill-opacity="0.78"/>
+<circle cx="983.7" cy="183.0" r="6.2" fill="#B279A2" fill-opacity="0.78"/>
+<circle cx="1120.0" cy="183.0" r="6.2" fill="#FF9DA6" fill-opacity="0.78"/>
+<polygon points="892.1,175.0 900.1,183.0 892.1,191.0 884.1,183.0" fill="#111"/>
+<text x="246" y="250.0" text-anchor="end" font-size="14">gemini-3.1-flash-lite-preview_low</text>
+<circle cx="1120.0" cy="245.0" r="6.2" fill="#4C78A8" fill-opacity="0.78"/>
+<circle cx="608.3" cy="245.0" r="6.2" fill="#F58518" fill-opacity="0.78"/>
+<circle cx="848.7" cy="245.0" r="6.2" fill="#54A24B" fill-opacity="0.78"/>
+<circle cx="1120.0" cy="245.0" r="6.2" fill="#E45756" fill-opacity="0.78"/>
+<circle cx="1042.8" cy="245.0" r="6.2" fill="#72B7B2" fill-opacity="0.78"/>
+<circle cx="329.6" cy="245.0" r="6.2" fill="#B279A2" fill-opacity="0.78"/>
+<circle cx="260.0" cy="245.0" r="6.2" fill="#FF9DA6" fill-opacity="0.78"/>
+<polygon points="761.3,237.0 769.3,245.0 761.3,253.0 753.3,245.0" fill="#111"/>
+<text x="246" y="312.0" text-anchor="end" font-size="14">gpt-5.4_low</text>
+<circle cx="900.0" cy="307.0" r="6.2" fill="#4C78A8" fill-opacity="0.78"/>
+<circle cx="740.2" cy="307.0" r="6.2" fill="#F58518" fill-opacity="0.78"/>
+<circle cx="1054.5" cy="307.0" r="6.2" fill="#54A24B" fill-opacity="0.78"/>
+<circle cx="260.0" cy="307.0" r="6.2" fill="#E45756" fill-opacity="0.78"/>
+<circle cx="701.1" cy="307.0" r="6.2" fill="#72B7B2" fill-opacity="0.78"/>
+<circle cx="784.4" cy="307.0" r="6.2" fill="#B279A2" fill-opacity="0.78"/>
+<circle cx="586.2" cy="307.0" r="6.2" fill="#FF9DA6" fill-opacity="0.78"/>
+<polygon points="718.1,299.0 726.1,307.0 718.1,315.0 710.1,307.0" fill="#111"/>
+<text x="246" y="374.0" text-anchor="end" font-size="14">gpt-5.4-mini_high</text>
+<circle cx="800.0" cy="369.0" r="6.2" fill="#4C78A8" fill-opacity="0.78"/>
+<circle cx="260.0" cy="369.0" r="6.2" fill="#F58518" fill-opacity="0.78"/>
+<circle cx="1087.2" cy="369.0" r="6.2" fill="#54A24B" fill-opacity="0.78"/>
+<circle cx="307.1" cy="369.0" r="6.2" fill="#E45756" fill-opacity="0.78"/>
+<circle cx="1066.5" cy="369.0" r="6.2" fill="#72B7B2" fill-opacity="0.78"/>
+<circle cx="1120.0" cy="369.0" r="6.2" fill="#B279A2" fill-opacity="0.78"/>
+<circle cx="319.3" cy="369.0" r="6.2" fill="#FF9DA6" fill-opacity="0.78"/>
+<polygon points="708.6,361.0 716.6,369.0 708.6,377.0 700.6,369.0" fill="#111"/>
+<text x="246" y="436.0" text-anchor="end" font-size="14">claude-sonnet-4-5_low</text>
+<circle cx="800.0" cy="431.0" r="6.2" fill="#4C78A8" fill-opacity="0.78"/>
+<circle cx="1113.2" cy="431.0" r="6.2" fill="#F58518" fill-opacity="0.78"/>
+<circle cx="1120.0" cy="431.0" r="6.2" fill="#54A24B" fill-opacity="0.78"/>
+<circle cx="366.0" cy="431.0" r="6.2" fill="#E45756" fill-opacity="0.78"/>
+<circle cx="260.0" cy="431.0" r="6.2" fill="#72B7B2" fill-opacity="0.78"/>
+<circle cx="260.0" cy="431.0" r="6.2" fill="#B279A2" fill-opacity="0.78"/>
+<circle cx="942.1" cy="431.0" r="6.2" fill="#FF9DA6" fill-opacity="0.78"/>
+<polygon points="694.5,423.0 702.5,431.0 694.5,439.0 686.5,431.0" fill="#111"/>
+<text x="246" y="498.0" text-anchor="end" font-size="14">gpt-5.4-mini_low</text>
+<circle cx="500.0" cy="493.0" r="6.2" fill="#4C78A8" fill-opacity="0.78"/>
+<circle cx="407.8" cy="493.0" r="6.2" fill="#F58518" fill-opacity="0.78"/>
+<circle cx="260.0" cy="493.0" r="6.2" fill="#54A24B" fill-opacity="0.78"/>
+<circle cx="366.0" cy="493.0" r="6.2" fill="#E45756" fill-opacity="0.78"/>
+<circle cx="478.3" cy="493.0" r="6.2" fill="#72B7B2" fill-opacity="0.78"/>
+<circle cx="878.8" cy="493.0" r="6.2" fill="#B279A2" fill-opacity="0.78"/>
+<circle cx="289.7" cy="493.0" r="6.2" fill="#FF9DA6" fill-opacity="0.78"/>
+<polygon points="454.4,485.0 462.4,493.0 454.4,501.0 446.4,493.0" fill="#111"/>
+<rect x="885" y="100" width="225" height="162" fill="#ffffffdd" stroke="#ddd"/>
+<circle cx="897" cy="114" r="5" fill="#4C78A8"/>
+<text x="909" y="118" font-size="11">animal_octopus</text>
+<circle cx="897" cy="132" r="5" fill="#F58518"/>
+<text x="909" y="136" font-size="11">character_gandalf</text>
+<circle cx="897" cy="150" r="5" fill="#54A24B"/>
+<text x="909" y="154" font-size="11">food_croissant</text>
+<circle cx="897" cy="168" r="5" fill="#E45756"/>
+<text x="909" y="172" font-size="11">object_toothbrush</text>
+<circle cx="897" cy="186" r="5" fill="#72B7B2"/>
+<text x="909" y="190" font-size="11">object_umbrella</text>
+<circle cx="897" cy="204" r="5" fill="#B279A2"/>
+<text x="909" y="208" font-size="11">person_marie_curie</text>
+<circle cx="897" cy="222" r="5" fill="#FF9DA6"/>
+<text x="909" y="226" font-size="11">place_busan</text>
+<polygon points="897,234 903,240 897,246 891,240" fill="#111"/>
+<text x="909" y="244" font-size="11">overall</text>
+</svg>
