@@ -89,7 +89,7 @@ def km_rmq(runs: Iterable[RunRecord], tau: int) -> float:
     for k in range(1, tau + 1):
         at_risk = 0
         events_at_k = 0
-        for y, d in zip(turns, events, strict=False):
+        for y, d in zip(turns, events):
             if y >= k:
                 at_risk += 1
             if y == k and d == 1:
@@ -183,64 +183,159 @@ def _plot_scores_matplotlib(model_scores: list[ModelScore], output_path: Path) -
     if not model_scores:
         raise ValueError("No model scores to plot")
 
+    LABEL_MAP: dict[str, str] = {
+        "gpt-5.4_low": "GPT-5.4 (low)",
+        "gpt-5.4_high": "GPT-5.4 (high)",
+        "gpt-5.4-mini_low": "GPT-5.4 Mini (low)",
+        "gpt-5.4-mini_high": "GPT-5.4 Mini (high)",
+        "gemini-3-flash-preview_low": "Gemini 3 Flash (low)",
+        "gemini-3-flash-preview_high": "Gemini 3 Flash (high)",
+        "gemini-3.1-flash-lite-preview_low": "Gemini 3.1 Flash Lite (low)",
+        "gemini-3.1-flash-lite-preview_high": "Gemini 3.1 Flash Lite (high)",
+        "claude-opus-4-6_low": "Claude Opus 4.6 (low)",
+        "claude-opus-4-6_high": "Claude Opus 4.6 (high)",
+        "claude-sonnet-4-5_low": "Claude Sonnet 4.5 (low)",
+        "claude-sonnet-4-5_high": "Claude Sonnet 4.5 (high)",
+        "claude-3-7-sonnet-20250219_low": "Claude 3.7 Sonnet (low)",
+        "claude-3-7-sonnet-20250219_high": "Claude 3.7 Sonnet (high)",
+    }
+
     targets = sorted({target for row in model_scores for target in row.per_target_scores})
     target_palette = [
-        "#4C78A8",
-        "#F58518",
-        "#54A24B",
-        "#E45756",
-        "#72B7B2",
-        "#B279A2",
-        "#FF9DA6",
-        "#9D755D",
+        "#2563EB",  # blue
+        "#DC2626",  # red
+        "#059669",  # emerald
+        "#D97706",  # amber
+        "#7C3AED",  # violet
+        "#DB2777",  # pink
+        "#0891B2",  # cyan
+        "#65A30D",  # lime
     ]
     target_colors = {target: target_palette[idx % len(target_palette)] for idx, target in enumerate(targets)}
 
-    y_labels = [row.guesser_w_effort for row in model_scores]
+    y_labels = [LABEL_MAP.get(row.guesser_w_effort, row.guesser_w_effort) for row in model_scores]
     y_positions = list(range(len(model_scores)))
 
-    fig, ax = plt.subplots(figsize=(11, max(5.5, 0.9 * len(model_scores))))
+    fig, ax = plt.subplots(figsize=(12, max(4.5, 0.85 * len(model_scores))))
 
-    for y, row in zip(y_positions, model_scores, strict=False):
+    # Alternating row backgrounds
+    for y in y_positions:
+        if y % 2 == 0:
+            ax.axhspan(y - 0.4, y + 0.4, color="#f0f4f8", alpha=0.6, zorder=0)
+
+    for y, row in zip(y_positions, model_scores):
+        # Horizontal line connecting min to max per-target score
+        scores = list(row.per_target_scores.values())
+        if scores:
+            ax.plot(
+                [min(scores), max(scores)],
+                [y, y],
+                color="#cbd5e1",
+                linewidth=2.0,
+                solid_capstyle="round",
+                zorder=1,
+            )
+
+        # Per-target dots
         for target, score in row.per_target_scores.items():
             ax.scatter(
                 score,
                 y,
                 color=target_colors[target],
-                s=52,
-                alpha=0.75,
-                linewidths=0.0,
-                zorder=2,
+                s=70,
+                alpha=0.88,
+                edgecolors="white",
+                linewidths=0.6,
+                zorder=3,
             )
+
+        # Overall diamond
         ax.scatter(
             row.overall_score,
             y,
-            color="black",
+            color="#111827",
             marker="D",
-            s=92,
-            zorder=3,
+            s=110,
+            edgecolors="white",
+            linewidths=1.2,
+            zorder=4,
+        )
+
+        # Score annotation next to diamond
+        ax.text(
+            row.overall_score,
+            y + 0.32,
+            f"{row.overall_score:.1f}",
+            ha="center",
+            va="top",
+            fontsize=8.5,
+            fontweight="bold",
+            color="#374151",
+            zorder=5,
         )
 
     ax.set_xlim(-2, 102)
     ax.set_xlabel("C-TQS (higher is better)", fontsize=12, fontweight="bold")
     ax.set_yticks(y_positions)
-    ax.set_yticklabels(y_labels, fontsize=10)
+    ax.set_yticklabels(y_labels, fontsize=10.5, fontweight="medium")
     ax.invert_yaxis()
-    ax.grid(axis="x", alpha=0.25)
+    ax.grid(axis="x", alpha=0.2, linestyle="--")
     ax.set_title(
-        "C-TQS by guesser_w_effort\n"
-        "Dots: per-target normalized censored efficiency | Diamond: macro average",
-        fontsize=13,
+        "C-TQS Model Ranking",
+        fontsize=15,
         fontweight="bold",
+        pad=20,
+    )
+    ax.text(
+        0.5,
+        1.02,
+        "Per-target dots (colored) · Overall macro average (diamond)",
+        transform=ax.transAxes,
+        ha="center",
+        va="bottom",
+        fontsize=10,
+        color="#6b7280",
     )
 
+    # Spine cleanup
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.tick_params(axis="y", length=0)
+
+    # Legend below chart
     legend_handles = [
-        plt.Line2D([0], [0], marker="o", color="w", markerfacecolor=target_colors[t], markersize=7, label=t) for t in targets
+        plt.Line2D(
+            [0], [0],
+            marker="o",
+            color="w",
+            markerfacecolor=target_colors[t],
+            markeredgecolor="white",
+            markersize=8,
+            label=t,
+        )
+        for t in targets
     ]
     legend_handles.append(
-        plt.Line2D([0], [0], marker="D", color="w", markerfacecolor="black", markersize=7, label="overall")
+        plt.Line2D(
+            [0], [0],
+            marker="D",
+            color="w",
+            markerfacecolor="#111827",
+            markeredgecolor="white",
+            markersize=8,
+            label="overall",
+        )
     )
-    ax.legend(handles=legend_handles, loc="lower right", fontsize=8, framealpha=0.9, ncol=2)
+    ax.legend(
+        handles=legend_handles,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.08),
+        fontsize=9,
+        frameon=False,
+        ncol=min(len(targets) + 1, 5),
+        columnspacing=1.5,
+    )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()

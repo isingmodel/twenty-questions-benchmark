@@ -14,33 +14,94 @@ One model acts as the guesser. Another acts as the judge. Every run produces ful
 
 ![Model Performance Overview](img/model_overview.png)
 
-The overview plot is generated from local suite analysis output. See [Reproducibility](docs/reproducibility.md) for the exact commands and paths.
+The overview plot is generated from `results/results.csv`. See [Reproducibility](docs/reproducibility.md) for the exact commands and paths.
+
+## Benchmark Results
+
+The table below summarizes per-model performance across 980 runs (7 targets × 7 model variants × 20 repetitions). Each model variant is identified by the base model and its reasoning effort setting (e.g., `low` or `high`).
+
+| Rank | Model | Solve Rate | Avg Turns / Success | Runs |
+|-----:|-------|----------:|--------------------:|-----:|
+| 1 | Claude Opus 4.6 (low) | 99.29% | 21.13 | 140 |
+| 2 | Gemini 3.1 Flash Lite (low) | 99.22% | 23.15 | 128 |
+| 3 | GPT-5.4 (low) | 98.57% | 23.12 | 140 |
+| 4 | GPT-5.4 Mini (high) | 98.56% | 23.97 | 139 |
+| 5 | GPT-5.4 Mini (low) | 93.57% | 28.24 | 140 |
+| 6 | Claude Sonnet 4.5 (low) | 91.43% | 22.79 | 140 |
+| 7 | Gemini 3 Flash (low) | 90.71% | 21.87 | 140 |
+
+**Key takeaways:**
+
+- **Claude Opus 4.6** leads in both solve rate (99.3%) and efficiency (21.1 turns per success), placing it firmly in the "ideal" quadrant of the scatter plot.
+- **Reasoning effort matters.** GPT-5.4 Mini with `high` effort solves 5 percentage points more often than its `low` counterpart, though at a slight cost in average turns.
+- **High solve rate does not guarantee fast solves.** Gemini 3 Flash (low) and Claude Sonnet 4.5 (low) both solve fewer games overall but do so in fewer turns when they succeed. The scatter plot captures this trade-off directly.
+- All models were judged by the same judge configuration, so differences reflect guesser behavior, not judging variance.
 
 ## C-TQS Metric (Censored Twenty Questions Score)
 
-To evaluate twenty-questions skill without introducing a hard-cap artifact (for example, treating all failures as exactly 80 turns), this repo also supports a **censored time-to-solve metric**:
+### Why a specialized metric?
 
-- Treat each run as `(time = turns_used, event = solved)`.
-- `solved=False` is handled as **right-censored**, not as a true solved time.
-- For each `target_id × guesser_w_effort`, compute a Kaplan-Meier survival curve and its restricted mean questions:
+Solve rate and average turns are useful but incomplete. A model that solves 95% of games in 40 turns each is arguably worse than one that solves 90% in 15 turns. And when a model *fails* to solve a target, capping it at the budget (e.g., 80 turns) pollutes the average with an arbitrary penalty. C-TQS addresses both issues by borrowing from survival analysis.
 
-```text
-RMQ(τ) = ∫[0,τ] S(t) dt
-```
+### How it works
 
-where lower RMQ means fewer expected questions within a shared horizon.
+C-TQS treats each game as a time-to-event observation:
 
-Then, per target, convert RMQ into a 0–100 relative score:
+1. **Record observations.** Each run yields a pair `(turns_used, solved)`. Solved runs are *events*; unsolved runs are *right-censored* — we know the model used at least that many turns, but not how many it would have needed.
 
-```text
-C-TQS(model,target) =
-100 * (RMQ_worst(target) - RMQ_model(target))
-      / (RMQ_worst(target) - RMQ_best(target))
-```
+2. **Estimate a survival curve.** For each `target × model` combination, fit a Kaplan-Meier curve. The survival function `S(t)` represents the probability that the model has *not yet solved* the target by turn `t`.
 
-The final C-TQS for a model is the macro-average across targets.
+3. **Compute the Restricted Mean Questions (RMQ).** Integrate the survival curve up to a shared horizon `τ`:
 
-Generate the plot from `results/results.csv`:
+   ```text
+   RMQ(τ) = ∫[0,τ] S(t) dt
+   ```
+
+   Lower RMQ means the model solves faster within the comparison window. The horizon `τ` is set per target as the minimum of each model's maximum observed turn count, ensuring every model is compared over a fair, fully-observed range.
+
+4. **Normalize to a 0–100 score.** Per target, scale each model's RMQ relative to the best and worst model on that target:
+
+   ```text
+   C-TQS(model, target) =
+     100 × (RMQ_worst − RMQ_model) / (RMQ_worst − RMQ_best)
+   ```
+
+   A score of 100 means the model is the fastest solver on that target; 0 means the slowest.
+
+5. **Macro-average.** The final C-TQS for a model is the unweighted mean across all targets.
+
+### Interpreting the chart
+
+The C-TQS ranking chart shows each model as a row. Colored dots represent per-target scores, and the black diamond marks the overall macro average. The horizontal spread of dots reveals *consistency*: a model with tightly clustered dots performs uniformly across targets, while wide spread indicates uneven strengths.
+
+| C-TQS Range | Interpretation |
+|-------------|----------------|
+| 80–100 | Consistently among the fastest solvers across targets |
+| 50–80 | Competitive but not dominant; may struggle on specific targets |
+| 20–50 | Below average efficiency relative to the field |
+| 0–20 | Significantly slower than peers on most targets |
+
+### Current C-TQS rankings
+
+| Rank | Model | C-TQS |
+|-----:|-------|------:|
+| 1 | Claude Opus 4.6 (low) | 73.6 |
+| 2 | Gemini 3 Flash (low) | 73.5 |
+| 3 | Gemini 3.1 Flash Lite (low) | 58.3 |
+| 4 | GPT-5.4 (low) | 53.3 |
+| 5 | GPT-5.4 Mini (high) | 52.2 |
+| 6 | Claude Sonnet 4.5 (low) | 50.5 |
+| 7 | GPT-5.4 Mini (low) | 22.6 |
+
+Notably, **Gemini 3 Flash** ranks 2nd in C-TQS despite placing 7th in raw solve rate. This reflects that when it does solve, it solves *fast* — exactly the kind of nuance C-TQS is designed to capture.
+
+### Caveats
+
+- C-TQS is a *relative* metric. Adding or removing a model changes the best/worst anchors and can shift all scores.
+- The per-target horizon `τ` depends on the models being compared. A model with very short runs can compress the horizon and reduce discrimination.
+- Targets with few runs per model produce noisier survival estimates.
+
+### Generate the plot
 
 ```bash
 python3 -m analysis.plot_c_tqs \
@@ -48,9 +109,7 @@ python3 -m analysis.plot_c_tqs \
   --output img/c_tqs_model_ranking.png
 ```
 
-If Matplotlib is unavailable in the environment, the script automatically writes an SVG fallback at `img/c_tqs_model_ranking.svg`.
-
-![C-TQS Model Ranking](img/c_tqs_model_ranking.svg)
+![C-TQS Model Ranking](img/c_tqs_model_ranking.png)
 
 ## What You Can Do
 
