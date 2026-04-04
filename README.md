@@ -50,12 +50,14 @@ Generate the plot from `results/results.csv`:
 ```bash
 python3 -m analysis.plot_c_tqs \
   --input results/results.csv \
-  --output img/c_tqs_model_ranking.png
+  --output img/c_tqs_model_ranking.png \
+  --model-only-output img/c_tqs_model_only.png
 ```
 
 If Matplotlib is unavailable in the environment, the script automatically writes an SVG fallback at `img/c_tqs_model_ranking.svg`.
 
 ![C-TQS Model Ranking](img/c_tqs_model_ranking.svg)
+![C-TQS Model-only Comparison](img/c_tqs_model_only.svg)
 
 ## What You Can Do
 

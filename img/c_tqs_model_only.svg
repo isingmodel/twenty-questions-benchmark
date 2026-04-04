@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="566">
+<rect width="100%" height="100%" fill="white"/>
+<text x="550" y="36" text-anchor="middle" font-size="23" font-weight="700">C-TQS Model Comparison (Model-only View)</text>
+<line x1="280.0" y1="90" x2="280.0" y2="496" stroke="#ececec"/>
+<text x="280.0" y="520" text-anchor="middle" font-size="12" fill="#444">0</text>
+<line x1="353.0" y1="90" x2="353.0" y2="496" stroke="#ececec"/>
+<text x="353.0" y="520" text-anchor="middle" font-size="12" fill="#444">10</text>
+<line x1="426.0" y1="90" x2="426.0" y2="496" stroke="#ececec"/>
+<text x="426.0" y="520" text-anchor="middle" font-size="12" fill="#444">20</text>
+<line x1="499.0" y1="90" x2="499.0" y2="496" stroke="#ececec"/>
+<text x="499.0" y="520" text-anchor="middle" font-size="12" fill="#444">30</text>
+<line x1="572.0" y1="90" x2="572.0" y2="496" stroke="#ececec"/>
+<text x="572.0" y="520" text-anchor="middle" font-size="12" fill="#444">40</text>
+<line x1="645.0" y1="90" x2="645.0" y2="496" stroke="#ececec"/>
+<text x="645.0" y="520" text-anchor="middle" font-size="12" fill="#444">50</text>
+<line x1="718.0" y1="90" x2="718.0" y2="496" stroke="#ececec"/>
+<text x="718.0" y="520" text-anchor="middle" font-size="12" fill="#444">60</text>
+<line x1="791.0" y1="90" x2="791.0" y2="496" stroke="#ececec"/>
+<text x="791.0" y="520" text-anchor="middle" font-size="12" fill="#444">70</text>
+<line x1="864.0" y1="90" x2="864.0" y2="496" stroke="#ececec"/>
+<text x="864.0" y="520" text-anchor="middle" font-size="12" fill="#444">80</text>
+<line x1="937.0" y1="90" x2="937.0" y2="496" stroke="#ececec"/>
+<text x="937.0" y="520" text-anchor="middle" font-size="12" fill="#444">90</text>
+<line x1="1010.0" y1="90" x2="1010.0" y2="496" stroke="#ececec"/>
+<text x="1010.0" y="520" text-anchor="middle" font-size="12" fill="#444">100</text>
+<text x="266" y="124.0" text-anchor="end" font-size="14">gemini-3-flash-preview_low</text>
+<rect x="280" y="107.0" width="539.1" height="24" fill="#111" fill-opacity="0.85"/>
+<circle cx="816.6" cy="119.0" r="5.2" fill="#f5f5f5" stroke="#222" stroke-width="1.4"/>
+<text x="829.1" y="123.0" font-size="11" fill="#222">73.8</text>
+<text x="266" y="182.0" text-anchor="end" font-size="14">claude-opus-4-6_low</text>
+<rect x="280" y="165.0" width="529.9" height="24" fill="#111" fill-opacity="0.85"/>
+<circle cx="817.2" cy="177.0" r="5.2" fill="#f5f5f5" stroke="#222" stroke-width="1.4"/>
+<text x="819.9" y="181.0" font-size="11" fill="#222">72.6</text>
+<text x="266" y="240.0" text-anchor="end" font-size="14">gemini-3.1-flash-lite-preview_low</text>
+<rect x="280" y="223.0" width="422.0" height="24" fill="#111" fill-opacity="0.85"/>
+<circle cx="705.5" cy="235.0" r="5.2" fill="#f5f5f5" stroke="#222" stroke-width="1.4"/>
+<text x="712.0" y="239.0" font-size="11" fill="#222">57.8</text>
+<text x="266" y="298.0" text-anchor="end" font-size="14">gpt-5.4_low</text>
+<rect x="280" y="281.0" width="384.2" height="24" fill="#111" fill-opacity="0.85"/>
+<circle cx="668.8" cy="293.0" r="5.2" fill="#f5f5f5" stroke="#222" stroke-width="1.4"/>
+<text x="674.2" y="297.0" font-size="11" fill="#222">52.6</text>
+<text x="266" y="356.0" text-anchor="end" font-size="14">gpt-5.4-mini_high</text>
+<rect x="280" y="339.0" width="371.2" height="24" fill="#111" fill-opacity="0.85"/>
+<circle cx="660.8" cy="351.0" r="5.2" fill="#f5f5f5" stroke="#222" stroke-width="1.4"/>
+<text x="661.2" y="355.0" font-size="11" fill="#222">50.9</text>
+<text x="266" y="414.0" text-anchor="end" font-size="14">claude-sonnet-4-5_low</text>
+<rect x="280" y="397.0" width="369.2" height="24" fill="#111" fill-opacity="0.85"/>
+<circle cx="648.8" cy="409.0" r="5.2" fill="#f5f5f5" stroke="#222" stroke-width="1.4"/>
+<text x="659.2" y="413.0" font-size="11" fill="#222">50.6</text>
+<text x="266" y="472.0" text-anchor="end" font-size="14">gpt-5.4-mini_low</text>
+<rect x="280" y="455.0" width="166.1" height="24" fill="#111" fill-opacity="0.85"/>
+<circle cx="445.0" cy="467.0" r="5.2" fill="#f5f5f5" stroke="#222" stroke-width="1.4"/>
+<text x="456.1" y="471.0" font-size="11" fill="#222">22.8</text>
+<text x="645.0" y="548" text-anchor="middle" font-size="14" font-weight="700">C-TQS (higher is better)</text>
+<rect x="825" y="98" width="170" height="48" fill="#ffffffdd" stroke="#ddd"/>
+<rect x="840" y="110" width="22" height="10" fill="#111" fill-opacity="0.85"/>
+<text x="872" y="119" font-size="12">weighted</text>
+<circle cx="851" cy="134" r="5.0" fill="#f5f5f5" stroke="#222" stroke-width="1.2"/>
+<text x="872" y="138" font-size="12">macro</text>
+</svg>

@@ -14,6 +14,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 DEFAULT_INPUT_PATH = _REPO_ROOT / "results" / "results.csv"
 DEFAULT_OUTPUT_PATH = _REPO_ROOT / "img" / "c_tqs_model_ranking.png"
+DEFAULT_MODEL_ONLY_OUTPUT_PATH = _REPO_ROOT / "img" / "c_tqs_model_only.png"
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Plot the censored time-to-solve score (C-TQS) by guesser_w_effort.")
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT_PATH, help="Run-level results CSV path.")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_PATH, help="Output PNG path.")
+    parser.add_argument(
+        "--model-only-output",
+        type=Path,
+        default=DEFAULT_MODEL_ONLY_OUTPUT_PATH,
+        help="Output path for model-only comparison figure.",
+    )
     return parser.parse_args()
 
 
@@ -392,12 +399,97 @@ def plot_scores(model_scores: list[ModelScore], output_path: Path) -> None:
         _plot_scores_svg(model_scores, svg_output)
 
 
+def _plot_model_only_matplotlib(model_scores: list[ModelScore], output_path: Path) -> None:
+    import matplotlib.pyplot as plt
+
+    labels = [row.guesser_w_effort for row in model_scores]
+    weighted = [row.weighted_score for row in model_scores]
+    macro = [row.macro_score for row in model_scores]
+    y_positions = list(range(len(model_scores)))
+
+    fig, ax = plt.subplots(figsize=(10, max(5.0, 0.85 * len(model_scores))))
+    ax.barh(y_positions, weighted, color="#111111", alpha=0.85, height=0.58, label="weighted")
+    ax.scatter(macro, y_positions, color="#F5F5F5", edgecolors="#222222", s=80, zorder=3, label="macro")
+
+    for y, score in zip(y_positions, weighted, strict=False):
+        ax.text(score + 1.0, y, f"{score:.1f}", va="center", fontsize=9)
+
+    ax.set_xlim(0, 100)
+    ax.set_xlabel("C-TQS (higher is better)", fontsize=12, fontweight="bold")
+    ax.set_yticks(y_positions)
+    ax.set_yticklabels(labels, fontsize=10)
+    ax.invert_yaxis()
+    ax.grid(axis="x", alpha=0.25)
+    ax.set_title("C-TQS Model Comparison (Model-only View)", fontsize=13, fontweight="bold")
+    ax.legend(loc="lower right", fontsize=9, framealpha=0.9)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=170, bbox_inches="tight")
+    print(f"Saved -> {output_path}")
+
+
+def _plot_model_only_svg(model_scores: list[ModelScore], output_path: Path) -> None:
+    width = 1100
+    row_h = 58
+    top = 90
+    left = 280
+    right = 90
+    bottom = 70
+    height = top + bottom + row_h * len(model_scores)
+    x0 = left
+    x1 = width - right
+
+    def x_map(score: float) -> float:
+        return x0 + (score / 100.0) * (x1 - x0)
+
+    lines: list[str] = []
+    lines.append(f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">')
+    lines.append('<rect width="100%" height="100%" fill="white"/>')
+    lines.append('<text x="550" y="36" text-anchor="middle" font-size="23" font-weight="700">C-TQS Model Comparison (Model-only View)</text>')
+
+    for tick in range(0, 101, 10):
+        x = x_map(float(tick))
+        lines.append(f'<line x1="{x:.1f}" y1="{top}" x2="{x:.1f}" y2="{height - bottom}" stroke="#ececec"/>')
+        lines.append(f'<text x="{x:.1f}" y="{height - bottom + 24}" text-anchor="middle" font-size="12" fill="#444">{tick}</text>')
+
+    for i, row in enumerate(model_scores):
+        y = top + i * row_h + row_h / 2
+        lines.append(f'<text x="{left - 14}" y="{y + 5:.1f}" text-anchor="end" font-size="14">{row.guesser_w_effort}</text>')
+        xw = x_map(row.weighted_score)
+        lines.append(f'<rect x="{x0}" y="{y - 12:.1f}" width="{max(0.0, xw - x0):.1f}" height="24" fill="#111" fill-opacity="0.85"/>')
+        xm = x_map(row.macro_score)
+        lines.append(f'<circle cx="{xm:.1f}" cy="{y:.1f}" r="5.2" fill="#f5f5f5" stroke="#222" stroke-width="1.4"/>')
+        lines.append(f'<text x="{min(x1 - 2, xw + 10):.1f}" y="{y + 4:.1f}" font-size="11" fill="#222">{row.weighted_score:.1f}</text>')
+
+    lines.append(f'<text x="{(x0+x1)/2:.1f}" y="{height-18}" text-anchor="middle" font-size="14" font-weight="700">C-TQS (higher is better)</text>')
+    lines.append(f'<rect x="{x1-185}" y="{top+8}" width="170" height="48" fill="#ffffffdd" stroke="#ddd"/>')
+    lines.append(f'<rect x="{x1-170}" y="{top+20}" width="22" height="10" fill="#111" fill-opacity="0.85"/>')
+    lines.append(f'<text x="{x1-138}" y="{top+29}" font-size="12">weighted</text>')
+    lines.append(f'<circle cx="{x1-159}" cy="{top+44}" r="5.0" fill="#f5f5f5" stroke="#222" stroke-width="1.2"/>')
+    lines.append(f'<text x="{x1-138}" y="{top+48}" font-size="12">macro</text>')
+    lines.append("</svg>")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text("\n".join(lines), encoding="utf-8")
+    print(f"Saved -> {output_path} (SVG fallback)")
+
+
+def plot_model_only(model_scores: list[ModelScore], output_path: Path) -> None:
+    try:
+        _plot_model_only_matplotlib(model_scores, output_path)
+    except ModuleNotFoundError:
+        svg_output = output_path.with_suffix(".svg")
+        _plot_model_only_svg(model_scores, svg_output)
+
+
 
 def main() -> None:
     args = parse_args()
     records = load_records(args.input)
     model_scores, target_horizons, target_weights = compute_scores(records)
     plot_scores(model_scores, args.output)
+    plot_model_only(model_scores, args.model_only_output)
 
     print("\n=== C-TQS Summary ===")
     print("target horizons (tau):")
