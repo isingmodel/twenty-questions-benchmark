@@ -16,16 +16,35 @@ One model acts as the guesser. Another acts as the judge. Every run produces ful
 
 The overview plot is generated from `results/results.csv`. See [Reproducibility](docs/reproducibility.md) for the exact commands and paths.
 
+## How It Works
+
+```text
+    Guesser                      Judge
+       |                           |
+       |--- "Is it a place?" ----->|
+       |<-- {"label":"Yes"} -------|
+       |                           |
+       |--- "Is it in Europe?" --->|
+       |<-- {"label":"Yes"} -------|
+       |                           |
+       |--- "Is it Paris?" ------->|
+       |<-- {"label":"Yes"} -------|  => SOLVED in 3 turns
+```
+
+- There is no separate "final guess" phase.
+- The guesser wins by asking a direct identity-check question that the judge confirms.
+- Every turn is logged with prompts, raw outputs, judgments, latency, and transcript artifacts.
+
 ## Benchmark Results
 
-The table below summarizes per-model performance across 980 runs (7 targets × 7 model variants × 20 repetitions). Each model variant is identified by the base model and its reasoning effort setting (e.g., `low` or `high`).
+The table below summarizes per-model performance across the 979 runs currently present in `results/results.csv`. Each model variant is identified by the base model and its reasoning effort setting (e.g., `low` or `high`).
 
 | Rank | Model | Solve Rate | Avg Turns / Success | Runs |
 |-----:|-------|----------:|--------------------:|-----:|
 | 1 | Claude Opus 4.6 (low) | 99.29% | 21.13 | 140 |
-| 2 | Gemini 3.1 Flash Lite (low) | 99.22% | 23.15 | 128 |
-| 3 | GPT-5.4 (low) | 98.57% | 23.12 | 140 |
-| 4 | GPT-5.4 Mini (high) | 98.56% | 23.97 | 139 |
+| 2 | GPT-5.4 (low) | 98.57% | 23.12 | 140 |
+| 3 | GPT-5.4 Mini (high) | 98.56% | 23.97 | 139 |
+| 4 | Gemini 3.1 Flash Lite (low) | 93.57% | 25.05 | 140 |
 | 5 | GPT-5.4 Mini (low) | 93.57% | 28.24 | 140 |
 | 6 | Claude Sonnet 4.5 (low) | 91.43% | 22.79 | 140 |
 | 7 | Gemini 3 Flash (low) | 90.71% | 21.87 | 140 |
@@ -85,13 +104,13 @@ The C-TQS ranking chart shows each model as a row. Colored dots represent per-ta
 
 | Rank | Model | C-TQS |
 |-----:|-------|------:|
-| 1 | Claude Opus 4.6 (low) | 73.6 |
-| 2 | Gemini 3 Flash (low) | 73.5 |
-| 3 | Gemini 3.1 Flash Lite (low) | 58.3 |
-| 4 | GPT-5.4 (low) | 53.3 |
-| 5 | GPT-5.4 Mini (high) | 52.2 |
-| 6 | Claude Sonnet 4.5 (low) | 50.5 |
-| 7 | GPT-5.4 Mini (low) | 22.6 |
+| 1 | Claude Opus 4.6 (low) | 79.31 |
+| 2 | Gemini 3 Flash (low) | 74.68 |
+| 3 | GPT-5.4 (low) | 54.66 |
+| 4 | GPT-5.4 Mini (high) | 54.08 |
+| 5 | Claude Sonnet 4.5 (low) | 52.57 |
+| 6 | Gemini 3.1 Flash Lite (low) | 37.86 |
+| 7 | GPT-5.4 Mini (low) | 25.88 |
 
 Notably, **Gemini 3 Flash** ranks 2nd in C-TQS despite placing 7th in raw solve rate. This reflects that when it does solve, it solves *fast* — exactly the kind of nuance C-TQS is designed to capture.
 
@@ -117,25 +136,6 @@ python3 -m analysis.plot_c_tqs \
 - Run repeated evaluation suites across multiple models and targets
 - Aggregate many suite runs into a single benchmark report
 - Regenerate a leaderboard-style overview plot from fresh results
-
-## How It Works
-
-```text
-    Guesser                      Judge
-       |                           |
-       |--- "Is it a place?" ----->|
-       |<-- {"label":"Yes"} -------|
-       |                           |
-       |--- "Is it in Europe?" --->|
-       |<-- {"label":"Yes"} -------|
-       |                           |
-       |--- "Is it Paris?" ------->|
-       |<-- {"label":"Yes"} -------|  => SOLVED in 3 turns
-```
-
-- There is no separate "final guess" phase.
-- The guesser wins by asking a direct identity-check question that the judge confirms.
-- Every turn is logged with prompts, raw outputs, judgments, latency, and transcript artifacts.
 
 ## Targets
 
@@ -204,7 +204,7 @@ This writes:
 python3 -m analysis.plot_model_overview
 ```
 
-By default this reads `reports/single-target-suite/benchmark-analysis/aggregate.json` and writes `img/model_overview.png`.
+By default this reads `results/results.csv` and writes `img/model_overview.png`.
 
 ### Reasoning Configuration
 
