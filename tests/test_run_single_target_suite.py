@@ -8,7 +8,10 @@ from pathlib import Path
 from twentyq.run_single_target_suite import (
     ModelVariant,
     SingleTargetSuiteConfig,
+    _build_jobs,
     _default_suite_dir,
+    _prepare_resume_plan,
+    _result_record,
     aggregate_results,
     load_suite_config,
     render_report,
@@ -152,6 +155,127 @@ class SingleTargetSuiteTests(unittest.TestCase):
         self.assertIn("__evaluation_v3_claude__budget80", path.name)
         self.assertNotIn("place_busan", path.name)
         self.assertNotIn("animal_octopus", path.name)
+
+    def test_prepare_resume_plan_recovers_completed_and_restarts_partial_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            suite_dir = Path(tmpdir) / "suite"
+            runs_dir = suite_dir / "runs"
+            runs_dir.mkdir(parents=True)
+
+            variant = ModelVariant(
+                label="gemini-3.1-flash-lite",
+                guesser_model="gemini-3.1-flash-lite-preview",
+                guesser_reasoning_effort=None,
+                judge_model="gpt-5.4-mini",
+                judge_reasoning_effort=None,
+                repetitions=3,
+            )
+            config = SingleTargetSuiteConfig(
+                suite_name="resume-suite",
+                target_ids=("place_paris",),
+                budget=80,
+                output_dir=None,
+                variants=(variant,),
+            )
+            jobs = _build_jobs(config, {"place_paris": {"id": "place_paris"}})
+
+            first_result = _result_record(
+                target_id="place_paris",
+                variant=variant,
+                repetition_index=1,
+                guesser_reasoning={},
+                judge_reasoning={},
+                summary={
+                    "run_id": "run-0001__full-game-test__gemini__gemini-3.1-flash-lite-preview",
+                    "mode": "full-game-test",
+                    "target_id": "place_paris",
+                    "target_name": "Paris",
+                    "solved": True,
+                    "turns_used": 7,
+                    "final_question": "Is it Paris?",
+                    "final_question_correct": True,
+                    "run_dir": str(runs_dir / "run-0001__full-game-test__gemini__gemini-3.1-flash-lite-preview"),
+                },
+            )
+            (suite_dir / "results.json").write_text(json.dumps({"results": [first_result]}), encoding="utf-8")
+
+            completed_run_dir = runs_dir / "run-0002__full-game-test__gemini__gemini-3.1-flash-lite-preview"
+            completed_run_dir.mkdir()
+            (completed_run_dir / "run_config.json").write_text(
+                json.dumps(
+                    {
+                        "run_id": completed_run_dir.name,
+                        "mode": "full-game-test",
+                        "config": {
+                            "target_id": "place_paris",
+                            "budget": 80,
+                            "guesser_provider": "gemini",
+                            "guesser_model": variant.guesser_model,
+                            "guesser_reasoning": {},
+                            "judge_provider": "openai",
+                            "judge_model": variant.judge_model,
+                            "judge_reasoning": {},
+                            "run_dir": str(completed_run_dir),
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (completed_run_dir / "summary.json").write_text(
+                json.dumps(
+                    {
+                        "run_id": completed_run_dir.name,
+                        "mode": "full-game-test",
+                        "target_id": "place_paris",
+                        "target_name": "Paris",
+                        "solved": False,
+                        "turns_used": 80,
+                        "final_question": "Is it in France?",
+                        "final_question_correct": False,
+                        "run_dir": str(completed_run_dir),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            partial_run_dir = runs_dir / "run-0003__full-game-test__gemini__gemini-3.1-flash-lite-preview"
+            partial_run_dir.mkdir()
+            (partial_run_dir / "run_config.json").write_text(
+                json.dumps(
+                    {
+                        "run_id": partial_run_dir.name,
+                        "mode": "full-game-test",
+                        "config": {
+                            "target_id": "place_paris",
+                            "budget": 80,
+                            "guesser_provider": "gemini",
+                            "guesser_model": variant.guesser_model,
+                            "guesser_reasoning": {},
+                            "judge_provider": "openai",
+                            "judge_model": variant.judge_model,
+                            "judge_reasoning": {},
+                            "run_dir": str(partial_run_dir),
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            plan = _prepare_resume_plan(config=config, jobs=jobs, suite_dir=suite_dir)
+
+            self.assertEqual(plan.recovered_run_ids, [completed_run_dir.name])
+            self.assertEqual(plan.deleted_partial_run_ids, [partial_run_dir.name])
+            self.assertFalse(partial_run_dir.exists())
+            self.assertEqual(
+                [(job["target_id"], job["repetition_index"]) for job in plan.remaining_jobs],
+                [("place_paris", 3)],
+            )
+            recovered_results = [plan.pending_results[index] for index in sorted(plan.pending_results)]
+            self.assertEqual(len(recovered_results), 2)
+            self.assertEqual(
+                {(result["target_id"], result["repetition_index"]) for result in recovered_results},
+                {("place_paris", 1), ("place_paris", 2)},
+            )
 
 
 if __name__ == "__main__":

@@ -4,7 +4,11 @@ import json
 import re
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
+from threading import Lock
 from typing import Any
+
+
+_RUN_ID_LOCK = Lock()
 
 
 def _sanitize_fragment(value: str) -> str:
@@ -43,9 +47,16 @@ class RunLogger:
                 _sanitize_fragment(guesser_model),
             ]
         )
-        run_index = _next_run_index(runs_dir)
-        run_id = f"run-{run_index:04d}__{slug}"
-        return cls(runs_dir / run_id, run_id)
+        with _RUN_ID_LOCK:
+            while True:
+                run_index = _next_run_index(runs_dir)
+                run_id = f"run-{run_index:04d}__{slug}"
+                root_dir = runs_dir / run_id
+                try:
+                    root_dir.mkdir(parents=True, exist_ok=False)
+                except FileExistsError:
+                    continue
+                return cls(root_dir, run_id)
 
     def _json_default(self, value: Any) -> Any:
         if isinstance(value, Path):

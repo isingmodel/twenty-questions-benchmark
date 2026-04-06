@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import json
+import re
+import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -42,6 +44,16 @@ class SingleTargetSuiteConfig:
     budget: int
     variants: tuple[ModelVariant, ...]
     output_dir: Path | None
+
+
+@dataclass
+class ResumePlan:
+    pending_results: dict[int, dict[str, Any]]
+    remaining_jobs: list[dict[str, Any]]
+    recovered_run_ids: list[str]
+    deleted_partial_run_ids: list[str]
+    orphaned_completed_run_ids: list[str]
+    orphaned_partial_run_ids: list[str]
 
 
 def _utc_now() -> str:
@@ -138,6 +150,334 @@ def load_suite_config(config_path: Path) -> SingleTargetSuiteConfig:
         budget=budget,
         variants=tuple(variants),
         output_dir=resolved_output_dir,
+    )
+
+
+def _read_json(path: Path) -> Any:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _job_key(target_id: str, variant_label: str, repetition_index: int) -> tuple[str, str, int]:
+    return (target_id, variant_label, repetition_index)
+
+
+def _job_key_from_result(result: dict[str, Any]) -> tuple[str, str, int]:
+    return _job_key(
+        str(result["target_id"]),
+        str(result["variant_label"]),
+        int(result["repetition_index"]),
+    )
+
+
+def _build_manifest(config: SingleTargetSuiteConfig, max_parallel: int) -> dict[str, Any]:
+    return {
+        "created_at": _utc_now(),
+        "suite_name": config.suite_name,
+        "budget": config.budget,
+        "max_parallel": max_parallel,
+        "targets": list(config.target_ids),
+        "variants": [
+            {
+                "label": variant.label,
+                "guesser_model": variant.guesser_model,
+                "guesser_reasoning_effort": variant.guesser_reasoning_effort,
+                "judge_model": variant.judge_model,
+                "judge_reasoning_effort": variant.judge_reasoning_effort,
+                "repetitions": variant.repetitions,
+                "resolved_guesser_reasoning": _reasoning_to_payload(
+                    resolve_reasoning_effort(variant.guesser_model, variant.guesser_reasoning_effort, role="Guesser")
+                ),
+                "resolved_judge_reasoning": _reasoning_to_payload(
+                    resolve_reasoning_effort(variant.judge_model, variant.judge_reasoning_effort, role="Judge")
+                ),
+            }
+            for variant in config.variants
+        ],
+    }
+
+
+def _build_jobs(
+    config: SingleTargetSuiteConfig,
+    targets_by_id: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    jobs: list[dict[str, Any]] = []
+    task_index = 0
+    for target_id in config.target_ids:
+        target = targets_by_id[target_id]
+        for variant in config.variants:
+            for repetition_index in range(1, variant.repetitions + 1):
+                jobs.append(
+                    {
+                        "task_index": task_index,
+                        "target_id": target_id,
+                        "target": target,
+                        "variant": variant,
+                        "repetition_index": repetition_index,
+                    }
+                )
+                task_index += 1
+    return jobs
+
+
+def _job_index_by_key(jobs: list[dict[str, Any]]) -> dict[tuple[str, str, int], int]:
+    index_by_key: dict[tuple[str, str, int], int] = {}
+    for job in jobs:
+        key = _job_key(job["target_id"], job["variant"].label, job["repetition_index"])
+        index_by_key[key] = int(job["task_index"])
+    return index_by_key
+
+
+def _refresh_status_counters(status: dict[str, Any], pending_results: dict[int, dict[str, Any]]) -> None:
+    status["runs_completed"] = len(pending_results)
+    status["runs_failed"] = sum(
+        1
+        for result in pending_results.values()
+        if result.get("error") and result.get("error_type") != "transient_error"
+    )
+    status["runs_transient_errors"] = sum(
+        1 for result in pending_results.values() if result.get("error_type") == "transient_error"
+    )
+
+
+def _reset_running_status(
+    status: dict[str, Any],
+    *,
+    resumed_at: str | None = None,
+    recovered_run_ids: list[str] | None = None,
+    deleted_partial_run_ids: list[str] | None = None,
+    orphaned_completed_run_ids: list[str] | None = None,
+    orphaned_partial_run_ids: list[str] | None = None,
+) -> None:
+    status["status"] = "running"
+    status["completed_at"] = None
+    status["updated_at"] = _utc_now()
+    status["current_target_id"] = None
+    status["current_variant_label"] = None
+    status["current_guesser_model"] = None
+    status["current_judge_model"] = None
+    status["current_repetition"] = None
+    status["active_runs"] = []
+    if resumed_at is not None:
+        status["resumed_at"] = resumed_at
+    if recovered_run_ids is not None:
+        status["resume_recovered_run_ids"] = recovered_run_ids
+    if deleted_partial_run_ids is not None:
+        status["resume_deleted_partial_run_ids"] = deleted_partial_run_ids
+    if orphaned_completed_run_ids is not None:
+        status["resume_orphaned_completed_run_ids"] = orphaned_completed_run_ids
+    if orphaned_partial_run_ids is not None:
+        status["resume_orphaned_partial_run_ids"] = orphaned_partial_run_ids
+
+
+def _parse_run_index(run_id: str) -> int:
+    match = re.match(r"run-(\d{4})__", run_id)
+    if match is None:
+        raise ValueError(f"Unable to parse run index from {run_id!r}")
+    return int(match.group(1))
+
+
+def _variant_matches_run_config(variant: ModelVariant, run_config: dict[str, Any]) -> bool:
+    return (
+        variant.guesser_model == run_config.get("guesser_model")
+        and variant.judge_model == run_config.get("judge_model")
+        and _reasoning_to_payload(resolve_reasoning_effort(variant.guesser_model, variant.guesser_reasoning_effort, role="Guesser"))
+        == run_config.get("guesser_reasoning", {})
+        and _reasoning_to_payload(resolve_reasoning_effort(variant.judge_model, variant.judge_reasoning_effort, role="Judge"))
+        == run_config.get("judge_reasoning", {})
+    )
+
+
+def _resolve_variant_for_run_config(config: SingleTargetSuiteConfig, run_config: dict[str, Any]) -> ModelVariant:
+    matches = [variant for variant in config.variants if _variant_matches_run_config(variant, run_config)]
+    if len(matches) != 1:
+        raise ValueError(
+            "Unable to uniquely match existing run config to a suite variant: "
+            f"guesser_model={run_config.get('guesser_model')!r}, "
+            f"judge_model={run_config.get('judge_model')!r}"
+        )
+    return matches[0]
+
+
+def _load_existing_results(
+    config: SingleTargetSuiteConfig,
+    jobs: list[dict[str, Any]],
+    results_path: Path,
+) -> dict[int, dict[str, Any]]:
+    raw_payload = _read_json(results_path)
+    raw_results = raw_payload.get("results")
+    if not isinstance(raw_results, list):
+        raise ValueError(f"Expected list field 'results' in {results_path}")
+
+    index_by_key = _job_index_by_key(jobs)
+    pending_results: dict[int, dict[str, Any]] = {}
+    for raw_result in raw_results:
+        if not isinstance(raw_result, dict):
+            raise ValueError(f"Expected each result in {results_path} to be an object")
+        key = _job_key_from_result(raw_result)
+        task_index = index_by_key.get(key)
+        if task_index is None:
+            raise ValueError(f"Found result outside current suite config: {key!r}")
+        if task_index in pending_results:
+            raise ValueError(f"Found duplicate result entry for {key!r}")
+        pending_results[task_index] = raw_result
+    return pending_results
+
+
+def _validate_resume_manifest(config: SingleTargetSuiteConfig, manifest_path: Path) -> None:
+    manifest = _read_json(manifest_path)
+    if manifest.get("suite_name") != config.suite_name:
+        raise ValueError(
+            f"Resume suite_name mismatch: expected {config.suite_name!r}, found {manifest.get('suite_name')!r}"
+        )
+    if manifest.get("budget") != config.budget:
+        raise ValueError(f"Resume budget mismatch: expected {config.budget}, found {manifest.get('budget')!r}")
+    if tuple(manifest.get("targets", [])) != config.target_ids:
+        raise ValueError("Resume target list mismatch between config and existing suite directory")
+
+    expected_variants = [
+        {
+            "label": variant.label,
+            "guesser_model": variant.guesser_model,
+            "guesser_reasoning_effort": variant.guesser_reasoning_effort,
+            "judge_model": variant.judge_model,
+            "judge_reasoning_effort": variant.judge_reasoning_effort,
+            "repetitions": variant.repetitions,
+        }
+        for variant in config.variants
+    ]
+    actual_variants = [
+        {
+            "label": raw_variant.get("label"),
+            "guesser_model": raw_variant.get("guesser_model"),
+            "guesser_reasoning_effort": raw_variant.get("guesser_reasoning_effort"),
+            "judge_model": raw_variant.get("judge_model"),
+            "judge_reasoning_effort": raw_variant.get("judge_reasoning_effort"),
+            "repetitions": raw_variant.get("repetitions"),
+        }
+        for raw_variant in manifest.get("variants", [])
+        if isinstance(raw_variant, dict)
+    ]
+    if actual_variants != expected_variants:
+        raise ValueError("Resume variant list mismatch between config and existing suite directory")
+
+
+def _prepare_resume_plan(
+    *,
+    config: SingleTargetSuiteConfig,
+    jobs: list[dict[str, Any]],
+    suite_dir: Path,
+) -> ResumePlan:
+    results_path = suite_dir / "results.json"
+    if not results_path.exists():
+        raise ValueError(f"Cannot resume without {results_path}")
+    pending_results = _load_existing_results(config, jobs, results_path)
+    index_by_key = _job_index_by_key(jobs)
+    existing_keys = {
+        _job_key(job["target_id"], job["variant"].label, job["repetition_index"])
+        for job in jobs
+        if int(job["task_index"]) in pending_results
+    }
+    existing_run_ids = {
+        str(result["run_id"])
+        for result in pending_results.values()
+        if isinstance(result.get("run_id"), str) and result["run_id"]
+    }
+
+    missing_by_group: dict[tuple[str, str], list[tuple[str, str, int]]] = {}
+    for job in jobs:
+        key = _job_key(job["target_id"], job["variant"].label, job["repetition_index"])
+        if key in existing_keys:
+            continue
+        missing_by_group.setdefault((job["target_id"], job["variant"].label), []).append(key)
+    for keys in missing_by_group.values():
+        keys.sort(key=lambda item: item[2])
+
+    completed_candidates: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    partial_candidates: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    runs_dir = suite_dir / "runs"
+    if runs_dir.exists():
+        for run_dir in sorted(runs_dir.iterdir()):
+            if not run_dir.is_dir():
+                continue
+            run_config_path = run_dir / "run_config.json"
+            if not run_config_path.exists():
+                continue
+            raw_run_config = _read_json(run_config_path)
+            run_config = raw_run_config.get("config")
+            if not isinstance(run_config, dict):
+                raise ValueError(f"Expected config object in {run_config_path}")
+            variant = _resolve_variant_for_run_config(config, run_config)
+            target_id = str(run_config["target_id"])
+            group_key = (target_id, variant.label)
+            entry = {
+                "run_dir": run_dir,
+                "run_id": run_dir.name,
+                "run_index": _parse_run_index(run_dir.name),
+                "target_id": target_id,
+                "variant": variant,
+            }
+            summary_path = run_dir / "summary.json"
+            if summary_path.exists():
+                if run_dir.name in existing_run_ids:
+                    continue
+                entry["summary"] = _read_json(summary_path)
+                completed_candidates.setdefault(group_key, []).append(entry)
+            else:
+                partial_candidates.setdefault(group_key, []).append(entry)
+
+    recovered_run_ids: list[str] = []
+    deleted_partial_run_ids: list[str] = []
+    orphaned_completed_run_ids: list[str] = []
+    orphaned_partial_run_ids: list[str] = []
+    rerun_keys: list[tuple[str, str, int]] = []
+
+    for group_key, entries in completed_candidates.items():
+        entries.sort(key=lambda item: int(item["run_index"]))
+        missing_keys = missing_by_group.get(group_key, [])
+        for entry in entries:
+            if not missing_keys:
+                orphaned_completed_run_ids.append(str(entry["run_id"]))
+                continue
+            job_key = missing_keys.pop(0)
+            variant = entry["variant"]
+            pending_results[index_by_key[job_key]] = _result_record(
+                target_id=str(job_key[0]),
+                variant=variant,
+                repetition_index=int(job_key[2]),
+                guesser_reasoning=_reasoning_to_payload(
+                    resolve_reasoning_effort(variant.guesser_model, variant.guesser_reasoning_effort, role="Guesser")
+                ),
+                judge_reasoning=_reasoning_to_payload(
+                    resolve_reasoning_effort(variant.judge_model, variant.judge_reasoning_effort, role="Judge")
+                ),
+                summary=dict(entry["summary"]),
+            )
+            recovered_run_ids.append(str(entry["run_id"]))
+
+    for group_key, entries in partial_candidates.items():
+        entries.sort(key=lambda item: int(item["run_index"]))
+        missing_keys = missing_by_group.get(group_key, [])
+        for entry in entries:
+            if not missing_keys:
+                orphaned_partial_run_ids.append(str(entry["run_id"]))
+                continue
+            job_key = missing_keys.pop(0)
+            shutil.rmtree(entry["run_dir"])
+            deleted_partial_run_ids.append(str(entry["run_id"]))
+            rerun_keys.append(job_key)
+
+    for group_keys in missing_by_group.values():
+        rerun_keys.extend(group_keys)
+
+    rerun_keys = sorted(set(rerun_keys), key=lambda key: index_by_key[key])
+    remaining_jobs = [jobs[index_by_key[key]] for key in rerun_keys]
+    return ResumePlan(
+        pending_results=pending_results,
+        remaining_jobs=remaining_jobs,
+        recovered_run_ids=recovered_run_ids,
+        deleted_partial_run_ids=deleted_partial_run_ids,
+        orphaned_completed_run_ids=orphaned_completed_run_ids,
+        orphaned_partial_run_ids=orphaned_partial_run_ids,
     )
 
 
@@ -299,6 +639,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", type=Path, required=True, help="Path to a suite config JSON file.")
     parser.add_argument("--suite-dir", type=Path, default=None, help="Optional output directory override.")
     parser.add_argument("--max-parallel", type=int, default=2, help="Maximum number of runs to execute in parallel.")
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume an interrupted suite in an existing suite directory instead of starting over.",
+    )
     return parser.parse_args()
 
 
@@ -349,6 +694,8 @@ def main() -> int:
     if args.max_parallel < 1:
         raise ValueError(f"--max-parallel must be positive, got {args.max_parallel}")
     suite_dir = args.suite_dir or config.output_dir or _default_suite_dir(config)
+    if args.resume and not suite_dir.exists():
+        raise ValueError(f"--resume requires an existing suite directory, got {suite_dir}")
     suite_dir.mkdir(parents=True, exist_ok=True)
 
     targets_by_id = load_targets(ROOT / "data" / "all_target.csv")
@@ -356,63 +703,44 @@ def main() -> int:
     if missing_targets:
         raise ValueError(f"Unknown target ids in suite config: {missing_targets!r}")
 
-    status = _initial_status(config, suite_dir)
-    results: list[dict[str, Any]] = []
     runs_dir = suite_dir / "runs"
+    jobs = _build_jobs(config, targets_by_id)
+    if args.resume:
+        _validate_resume_manifest(config, suite_dir / "manifest.json")
+        resume_plan = _prepare_resume_plan(config=config, jobs=jobs, suite_dir=suite_dir)
+        pending_results = dict(resume_plan.pending_results)
+        status_path = suite_dir / "status.json"
+        status = _read_json(status_path) if status_path.exists() else _initial_status(config, suite_dir)
+        _refresh_status_counters(status, pending_results)
+        _reset_running_status(
+            status,
+            resumed_at=_utc_now(),
+            recovered_run_ids=resume_plan.recovered_run_ids,
+            deleted_partial_run_ids=resume_plan.deleted_partial_run_ids,
+            orphaned_completed_run_ids=resume_plan.orphaned_completed_run_ids,
+            orphaned_partial_run_ids=resume_plan.orphaned_partial_run_ids,
+        )
+        results = [pending_results[index] for index in sorted(pending_results)]
+        _write_json(suite_dir / "results.json", {"results": results})
+        _write_json(status_path, status)
+        jobs_to_run = resume_plan.remaining_jobs
+    else:
+        status = _initial_status(config, suite_dir)
+        manifest = _build_manifest(config, args.max_parallel)
+        pending_results = {}
+        results: list[dict[str, Any]] = []
+        _write_json(suite_dir / "manifest.json", manifest)
+        _write_json(suite_dir / "status.json", status)
+        _write_json(suite_dir / "results.json", {"results": results})
+        jobs_to_run = jobs
 
-    manifest = {
-        "created_at": _utc_now(),
-        "suite_name": config.suite_name,
-        "budget": config.budget,
-        "max_parallel": args.max_parallel,
-        "targets": list(config.target_ids),
-        "variants": [
-            {
-                "label": variant.label,
-                "guesser_model": variant.guesser_model,
-                "guesser_reasoning_effort": variant.guesser_reasoning_effort,
-                "judge_model": variant.judge_model,
-                "judge_reasoning_effort": variant.judge_reasoning_effort,
-                "repetitions": variant.repetitions,
-                "resolved_guesser_reasoning": _reasoning_to_payload(
-                    resolve_reasoning_effort(variant.guesser_model, variant.guesser_reasoning_effort, role="Guesser")
-                ),
-                "resolved_judge_reasoning": _reasoning_to_payload(
-                    resolve_reasoning_effort(variant.judge_model, variant.judge_reasoning_effort, role="Judge")
-                ),
-            }
-            for variant in config.variants
-        ],
-    }
-    _write_json(suite_dir / "manifest.json", manifest)
-    _write_json(suite_dir / "status.json", status)
-    _write_json(suite_dir / "results.json", {"results": results})
-
-    jobs: list[dict[str, Any]] = []
-    task_index = 0
-    for target_id in config.target_ids:
-        target = targets_by_id[target_id]
-        for variant in config.variants:
-            for repetition_index in range(1, variant.repetitions + 1):
-                jobs.append(
-                    {
-                        "task_index": task_index,
-                        "target_id": target_id,
-                        "target": target,
-                        "variant": variant,
-                        "repetition_index": repetition_index,
-                    }
-                )
-                task_index += 1
-
-    pending_results: dict[int, dict[str, Any]] = {}
     active_runs_by_future: dict[concurrent.futures.Future[tuple[int, dict[str, Any], dict[str, Any], dict[str, Any]]], dict[str, Any]] = {}
     next_job_index = 0
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.max_parallel) as executor:
-        while next_job_index < len(jobs) or active_runs_by_future:
-            while next_job_index < len(jobs) and len(active_runs_by_future) < args.max_parallel:
-                job = jobs[next_job_index]
+        while next_job_index < len(jobs_to_run) or active_runs_by_future:
+            while next_job_index < len(jobs_to_run) and len(active_runs_by_future) < args.max_parallel:
+                job = jobs_to_run[next_job_index]
                 next_job_index += 1
                 status["updated_at"] = _utc_now()
                 status["current_target_id"] = job["target_id"]
@@ -455,12 +783,6 @@ def main() -> int:
             )
             pending_results[job["task_index"]] = result
             results = [pending_results[index] for index in sorted(pending_results)]
-            status["runs_completed"] += 1
-            if exit_code != 0:
-                if summary.get("error_type") == "transient_error":
-                    status["runs_transient_errors"] += 1
-                else:
-                    status["runs_failed"] += 1
             status["active_runs"] = [
                 active_run
                 for active_run in status["active_runs"]
@@ -471,6 +793,7 @@ def main() -> int:
                 )
             ]
             status["updated_at"] = _utc_now()
+            _refresh_status_counters(status, pending_results)
             _write_json(suite_dir / "results.json", {"results": results})
             _write_json(suite_dir / "status.json", status)
 
