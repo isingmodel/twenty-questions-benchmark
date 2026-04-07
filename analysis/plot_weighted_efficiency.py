@@ -15,6 +15,27 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_INPUT_PATH = _REPO_ROOT / "results" / "results.csv"
 DEFAULT_OUTPUT_PATH = _REPO_ROOT / "img" / "weighted_efficiency_ranking.png"
 
+LABEL_MAP: dict[str, str] = {
+    "gpt-5.4_low": "GPT-5.4 (low)",
+    "gpt-5.4_high": "GPT-5.4 (high)",
+    "gpt-5.4-mini_low": "GPT-5.4 Mini (low)",
+    "gpt-5.4-mini_high": "GPT-5.4 Mini (high)",
+    "gemini-3-flash-preview": "Gemini 3 Flash (low)",
+    "gemini-3-flash-preview_low": "Gemini 3 Flash (low)",
+    "gemini-3-flash-preview_high": "Gemini 3 Flash (high)",
+    "gemini-3.1-flash-lite-preview": "Gemini 3.1 Flash Lite (low)",
+    "gemini-3.1-flash-lite-preview_low": "Gemini 3.1 Flash Lite (low)",
+    "gemini-3.1-flash-lite-preview_high": "Gemini 3.1 Flash Lite (high)",
+    "claude-opus-4-6_budget_2048": "Claude Opus 4.6 (budget 2048)",
+    "claude-opus-4-6_low": "Claude Opus 4.6 (low)",
+    "claude-opus-4-6_high": "Claude Opus 4.6 (high)",
+    "claude-sonnet-4-5_budget_2048": "Claude Sonnet 4.5 (budget 2048)",
+    "claude-sonnet-4-5_low": "Claude Sonnet 4.5 (low)",
+    "claude-sonnet-4-5_high": "Claude Sonnet 4.5 (high)",
+    "claude-3-7-sonnet-20250219_low": "Claude 3.7 Sonnet (low)",
+    "claude-3-7-sonnet-20250219_high": "Claude 3.7 Sonnet (high)",
+}
+
 
 @dataclass(frozen=True)
 class RunRecord:
@@ -162,25 +183,11 @@ def plot_scores_matplotlib(scores: list[ModelScore], output_path: Path) -> None:
         print("matplotlib not found, skipping plot. Please install matplotlib.")
         return
 
-    LABEL_MAP: dict[str, str] = {
-        "gpt-5.4_low": "GPT-5.4 (low)",
-        "gpt-5.4_high": "GPT-5.4 (high)",
-        "gpt-5.4-mini_low": "GPT-5.4 Mini (low)",
-        "gpt-5.4-mini_high": "GPT-5.4 Mini (high)",
-        "gemini-3-flash-preview_low": "Gemini 3 Flash (low)",
-        "gemini-3-flash-preview_high": "Gemini 3 Flash (high)",
-        "gemini-3.1-flash-lite-preview_low": "Gemini 3.1 Flash Lite (low)",
-        "gemini-3.1-flash-lite-preview_high": "Gemini 3.1 Flash Lite (high)",
-        "claude-opus-4-6_low": "Claude Opus 4.6 (low)",
-        "claude-opus-4-6_high": "Claude Opus 4.6 (high)",
-        "claude-sonnet-4-5_low": "Claude Sonnet 4.5 (low)",
-        "claude-sonnet-4-5_high": "Claude Sonnet 4.5 (high)",
-        "claude-3-7-sonnet-20250219_low": "Claude 3.7 Sonnet (low)",
-        "claude-3-7-sonnet-20250219_high": "Claude 3.7 Sonnet (high)",
-    }
-
     y_labels = [LABEL_MAP.get(row.guesser_w_effort, row.guesser_w_effort) for row in scores]
     y_positions = list(range(len(scores)))
+    unmatched_label_keys = sorted({row.guesser_w_effort for row in scores if row.guesser_w_effort not in LABEL_MAP})
+    if unmatched_label_keys:
+        print(f"Warning: using raw labels for {', '.join(unmatched_label_keys)}")
 
     fig, ax = plt.subplots(figsize=(10, max(4.5, 0.85 * len(scores))))
 

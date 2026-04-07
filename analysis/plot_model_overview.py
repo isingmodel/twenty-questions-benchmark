@@ -15,18 +15,22 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_INPUT_PATH = _REPO_ROOT / "results" / "results.csv"
 DEFAULT_OUTPUT_PATH = _REPO_ROOT / "img" / "model_overview.png"
 
-# Keys are guesser_w_effort values (model_id + "_" + reasoning_effort).
+# Keys are raw guesser_w_effort values from results.csv.
 LABEL_MAP: dict[str, str] = {
     "gpt-5.4_low": "GPT-5.4 (low)",
     "gpt-5.4_high": "GPT-5.4 (high)",
     "gpt-5.4-mini_low": "GPT-5.4 Mini (low)",
     "gpt-5.4-mini_high": "GPT-5.4 Mini (high)",
+    "gemini-3-flash-preview": "Gemini 3 Flash",
     "gemini-3-flash-preview_low": "Gemini 3 Flash (low)",
     "gemini-3-flash-preview_high": "Gemini 3 Flash (high)",
+    "gemini-3.1-flash-lite-preview": "Gemini 3.1 Flash Lite",
     "gemini-3.1-flash-lite-preview_low": "Gemini 3.1 Flash Lite (low)",
     "gemini-3.1-flash-lite-preview_high": "Gemini 3.1 Flash Lite (high)",
+    "claude-opus-4-6_budget_2048": "Claude Opus 4.6 (budget 2048)",
     "claude-opus-4-6_low": "Claude Opus 4.6 (low)",
     "claude-opus-4-6_high": "Claude Opus 4.6 (high)",
+    "claude-sonnet-4-5_budget_2048": "Claude Sonnet 4.5 (budget 2048)",
     "claude-sonnet-4-5_low": "Claude Sonnet 4.5 (low)",
     "claude-sonnet-4-5_high": "Claude Sonnet 4.5 (high)",
     "claude-3-7-sonnet-20250219_low": "Claude 3.7 Sonnet (low)",
@@ -40,12 +44,16 @@ _STYLE: dict[str, tuple[str, str]] = {
     "gpt-5.4_high":                         ("#4A90D9", "*"),
     "gpt-5.4-mini_low":                     ("#7EC8E3", "s"),
     "gpt-5.4-mini_high":                    ("#7EC8E3", "^"),
+    "gemini-3-flash-preview":               ("#E8793A", "D"),
     "gemini-3-flash-preview_low":           ("#E8793A", "D"),
     "gemini-3-flash-preview_high":          ("#E8793A", "p"),
+    "gemini-3.1-flash-lite-preview":        ("#F5B041", "v"),
     "gemini-3.1-flash-lite-preview_low":    ("#F5B041", "v"),
     "gemini-3.1-flash-lite-preview_high":   ("#F5B041", "h"),
+    "claude-opus-4-6_budget_2048":          ("#2F6B5F", "H"),
     "claude-opus-4-6_low":                  ("#2F6B5F", "P"),
     "claude-opus-4-6_high":                 ("#2F6B5F", "H"),
+    "claude-sonnet-4-5_budget_2048":        ("#53A08E", "d"),
     "claude-sonnet-4-5_low":                ("#53A08E", "X"),
     "claude-sonnet-4-5_high":               ("#53A08E", "d"),
     "claude-3-7-sonnet-20250219_low":       ("#8CC7B8", ">"),
@@ -142,6 +150,9 @@ def render_plot(rows: list[PlotRow], output_path: Path) -> None:
 
     x_min, x_max, y_min, y_max = _axis_limits(rows)
     fig, ax = plt.subplots(figsize=(9, 6))
+    unmatched_style_keys = sorted({row.model_id for row in rows if row.model_id not in _STYLE})
+    if unmatched_style_keys:
+        print(f"Warning: using fallback scatter style for {', '.join(unmatched_style_keys)}")
 
     # Highlight "ideal" quadrant (high solve rate, low turns)
     ax.axvspan(max(x_min, x_max - 10.0), x_max, color="#e8f5e9", alpha=0.35, zorder=0)
@@ -157,7 +168,7 @@ def render_plot(rows: list[PlotRow], output_path: Path) -> None:
             x,
             y,
             s=200,
-            c=color,
+            color=color,
             marker=marker,
             edgecolors="#333333",
             linewidths=0.8,
