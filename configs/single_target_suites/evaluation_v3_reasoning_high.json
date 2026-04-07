@@ -1,0 +1,23 @@
+{
+  "suite_name": "evaluation_v3",
+  "targets": [
+    "place_busan",
+    "animal_octopus",
+    "person_marie_curie",
+    "character_gandalf",
+    "object_umbrella",
+    "object_toothbrush",
+    "food_croissant"
+  ],
+  "budget": 80,
+  "repetitions": 20,
+  "judge_model": "gpt-5.4-mini",
+  "guesser_reasoning_effort": "high",
+  "judge_reasoning_effort": "low",
+  "variants": [
+    {
+      "label": "gpt-5.4-mini",
+      "guesser_model": "gpt-5.4-mini"
+    }
+  ]
+}

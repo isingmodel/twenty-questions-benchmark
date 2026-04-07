@@ -56,79 +56,55 @@ The table below summarizes per-model performance across the 979 runs currently p
 - **High solve rate does not guarantee fast solves.** Gemini 3 Flash (low) and Claude Sonnet 4.5 (low) both solve fewer games overall but do so in fewer turns when they succeed. The scatter plot captures this trade-off directly.
 - All models were judged by the same judge configuration, so differences reflect guesser behavior, not judging variance.
 
-## C-TQS Metric (Censored Twenty Questions Score)
+## DWEI Metric (Difficulty-Weighted Efficiency Index)
 
 ### Why a specialized metric?
 
-Solve rate and average turns are useful but incomplete. A model that solves 95% of games in 40 turns each is arguably worse than one that solves 90% in 15 turns. And when a model *fails* to solve a target, capping it at the budget (e.g., 80 turns) pollutes the average with an arbitrary penalty. C-TQS addresses both issues by borrowing from survival analysis.
+Solve rate and average turns are useful but incomplete. 
+- A model that solves 95% of games in 40 turns each is arguably worse than one that solves 90% in 15 turns. 
+- When a model *fails* to solve a target, it hits the maximum budget (e.g., 40 or 80 turns). Excluding these failures causes extreme **survivor bias**, making models that only solve easy problems look artificially fast.
+- Easy problems and hard problems take vastly different numbers of turns. A simple turn difference on an easy problem should not carry the same absolute weight as a difference on a hard problem.
+
+DWEI addresses these issues by leveraging **survival analysis** and **difficulty-weighting** to create a mathematically robust and intuitive "efficiency index".
 
 ### How it works
 
-C-TQS treats each game as a time-to-event observation:
+1. **Calculate Target RMQ ($R_{m,i}$):** Each game yields `(turns_used, solved)`. For each `target × model` combination, we fit a Kaplan-Meier survival curve up to the target's maximum recorded turn horizon. The integral (area under this curve) is the Restricted Mean Questions (RMQ), representing the expected number of turns to solve. This cleanly penalizes failures without invoking survivor bias.
+2. **Determine Problem Difficulty ($D_i$):** A target's difficulty is the average RMQ across all evaluated models for that target. Higher $D_i$ means the problem was universally harder.
+3. **Calculate Efficiency Ratio ($1 / RMQ$):** We calculate a speedup ratio for each model on each target:
+   `Efficiency = Difficulty / Target RMQ`
+   If a problem's difficulty is 40 turns on average, and a model solves it in 20 turns, its efficiency ratio is 2.0. If it solves an easy 10-turn problem in 5 turns, the ratio is identically 2.0. This ensures that hard problems naturally reward fast, persistent solvers.
+4. **Final Index (DWEI):** We compute the unweighted mean of this efficiency ratio across all targets, then multiply by 100.
+   `DWEI = 100 × Mean( D_i / R_{m,i} )`
 
-1. **Record observations.** Each run yields a pair `(turns_used, solved)`. Solved runs are *events*; unsolved runs are *right-censored* — we know the model used at least that many turns, but not how many it would have needed.
+### Interpreting the score
 
-2. **Estimate a survival curve.** For each `target × model` combination, fit a Kaplan-Meier curve. The survival function `S(t)` represents the probability that the model has *not yet solved* the target by turn `t`.
+A score of **100** represents the exact benchmark average efficiency. 
+A score of **120** means the model is, on average, solving these targets **20% faster / more efficiently** than the baseline field of evaluated models. 
 
-3. **Compute the Restricted Mean Questions (RMQ).** Integrate the survival curve up to a shared horizon `τ`:
+### Current DWEI rankings
 
-   ```text
-   RMQ(τ) = ∫[0,τ] S(t) dt
-   ```
+| Rank | Model | DWEI Score |
+|-----:|-------|-----------:|
+| 1 | Claude Opus 4.6 (low) | 123.6 |
+| 2 | GPT-5.4 (low) | 112.1 |
+| 3 | GPT-5.4 Mini (high) | 109.3 |
+| 4 | Gemini 3 Flash (low) | 102.6 |
+| 5 | Claude Sonnet 4.5 (low) | 98.7 |
+| 6 | Gemini 3.1 Flash Lite (low) | 92.8 |
+| 7 | GPT-5.4 Mini (low) | 86.5 |
 
-   Lower RMQ means the model solves faster within the comparison window. The horizon `τ` is set per target as the minimum of each model's maximum observed turn count, ensuring every model is compared over a fair, fully-observed range.
-
-4. **Normalize to a 0–100 score.** Per target, scale each model's RMQ relative to the best and worst model on that target:
-
-   ```text
-   C-TQS(model, target) =
-     100 × (RMQ_worst − RMQ_model) / (RMQ_worst − RMQ_best)
-   ```
-
-   A score of 100 means the model is the fastest solver on that target; 0 means the slowest.
-
-5. **Macro-average.** The final C-TQS for a model is the unweighted mean across all targets.
-
-### Interpreting the chart
-
-The C-TQS ranking chart shows each model as a row. Colored dots represent per-target scores, and the black diamond marks the overall macro average. The horizontal spread of dots reveals *consistency*: a model with tightly clustered dots performs uniformly across targets, while wide spread indicates uneven strengths.
-
-| C-TQS Range | Interpretation |
-|-------------|----------------|
-| 80–100 | Consistently among the fastest solvers across targets |
-| 50–80 | Competitive but not dominant; may struggle on specific targets |
-| 20–50 | Below average efficiency relative to the field |
-| 0–20 | Significantly slower than peers on most targets |
-
-### Current C-TQS rankings
-
-| Rank | Model | C-TQS |
-|-----:|-------|------:|
-| 1 | Claude Opus 4.6 (low) | 79.31 |
-| 2 | Gemini 3 Flash (low) | 74.68 |
-| 3 | GPT-5.4 (low) | 54.66 |
-| 4 | GPT-5.4 Mini (high) | 54.08 |
-| 5 | Claude Sonnet 4.5 (low) | 52.57 |
-| 6 | Gemini 3.1 Flash Lite (low) | 37.86 |
-| 7 | GPT-5.4 Mini (low) | 25.88 |
-
-Notably, **Gemini 3 Flash** ranks 2nd in C-TQS despite placing 7th in raw solve rate. This reflects that when it does solve, it solves *fast* — exactly the kind of nuance C-TQS is designed to capture.
-
-### Caveats
-
-- C-TQS is a *relative* metric. Adding or removing a model changes the best/worst anchors and can shift all scores.
-- The per-target horizon `τ` depends on the models being compared. A model with very short runs can compress the horizon and reduce discrimination.
-- Targets with few runs per model produce noisier survival estimates.
+Notably, while some smaller models like **Gemini 3 Flash** or **Claude Sonnet 4.5** have fast median turn times when successful, their ~9% failure rates cause their survival curves to decay slower, keeping their final efficiency index properly anchored near 100. Models like **Claude Opus** maintain near 100% win rates *along* with high speed, resulting in massive efficiency gains.
 
 ### Generate the plot
 
 ```bash
-python3 -m analysis.plot_c_tqs \
+python3 -m analysis.plot_weighted_efficiency \
   --input results/results.csv \
-  --output img/c_tqs_model_ranking.png
+  --output img/weighted_efficiency_ranking.png
 ```
 
-![C-TQS Model Ranking](img/c_tqs_model_ranking.png)
+![DWEI Model Ranking](img/weighted_efficiency_ranking.png)
 
 ## What You Can Do
 
