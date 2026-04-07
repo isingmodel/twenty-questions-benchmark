@@ -41,9 +41,9 @@ The table below summarizes per-model performance across the 979 runs currently p
 
 | Rank | Model | Solve Rate | Avg Turns / Success | Runs |
 |-----:|-------|----------:|--------------------:|-----:|
-| 1 | Claude Opus 4.6 (low) | 99.29% | 21.13 | 140 |
+| 1 | Claude Opus 4.6 (low_2048) | 99.29% | 21.13 | 140 |
 | 2 | GPT-5.4 (low) | 98.57% | 23.12 | 140 |
-| 3 | GPT-5.4 Mini (high) | 98.56% | 23.97 | 139 |
+| 3 | GPT-5.4 Mini (high) | 98.57% | 24.09 | 140 |
 | 4 | Gemini 3.1 Flash Lite (low) | 93.57% | 25.05 | 140 |
 | 5 | GPT-5.4 Mini (low) | 93.57% | 28.24 | 140 |
 | 6 | Claude Sonnet 4.5 (low) | 91.43% | 22.79 | 140 |
@@ -86,7 +86,7 @@ A score of **120** means the model is, on average, solving these targets **20% f
 
 | Rank | Model | DWEI Score |
 |-----:|-------|-----------:|
-| 1 | Claude Opus 4.6 (low) | 123.6 |
+| 1 | Claude Opus 4.6 (low) | 123.7 |
 | 2 | GPT-5.4 (low) | 112.1 |
 | 3 | GPT-5.4 Mini (high) | 109.3 |
 | 4 | Gemini 3 Flash (low) | 102.6 |
