@@ -2,19 +2,18 @@
 
 A polished multi-turn benchmark for measuring how efficiently LLMs can solve a hidden-target game through yes/no questions.
 
-One model acts as the guesser. Another acts as the judge. Every run produces full prompts, event logs, transcripts, suite aggregates, and analysis-ready reports, so you can compare models with more visibility than a simple pass/fail leaderboard.
+This benchmark is meant to capture something many static QA leaderboards miss: interactive search under uncertainty. To succeed, a model has to ask discriminative yes/no questions, update its internal hypothesis after each answer, and decide when to stop exploring and commit to a direct identity check. In practice, that makes it a compact test of question selection, hypothesis tracking, and budgeted decision-making rather than pure one-shot recall.
 
-## Why This Repo
+At a deeper level, the benchmark is trying to measure a model's ability to reduce uncertainty through dialogue: ask high-information questions, maintain and revise a working hypothesis over multiple turns, and convert that narrowed search space into a precise identification at the right moment. That makes the repository a useful bridge between simple single-turn evals and looser agent benchmarks.
 
-- Multi-turn evaluation instead of single-shot QA
-- Cross-provider model comparisons with repeatable suite configs
-- Full prompt and transcript logging for auditability
-- Built-in suite analysis and plotting
-- Small enough to iterate quickly, rich enough to expose search behavior
+One model acts as the guesser. Another acts as the judge. The protocol is intentionally explicit: target records, prompt templates, judge policy, reasoning settings, and logs are all inspectable, so runs can be compared under a clearly specified setup and audited from full transcripts rather than a black-box win rate alone. Every run produces prompts, event logs, transcripts, suite aggregates, and analysis-ready reports.
 
-![Model Performance Overview](img/model_overview.png)
+## Why This Benchmark Matters
 
-The overview plot is generated from `results/results.csv`. See [Reproducibility](docs/reproducibility.md) for the exact commands and paths.
+- It evaluates interactive uncertainty reduction instead of single-shot recall.
+- It keeps the protocol fixed enough that side-by-side model comparisons are interpretable.
+- It logs full trajectories, so you can inspect search behavior and failure modes rather than only win/loss outcomes.
+- It is small enough to rerun frequently, but rich enough to expose meaningful differences in questioning strategy.
 
 ## How It Works
 
@@ -37,24 +36,30 @@ The overview plot is generated from `results/results.csv`. See [Reproducibility]
 
 ## Benchmark Results
 
-The table below summarizes per-model performance across the 979 runs currently present in `results/results.csv`. Each model variant is identified by the base model and its reasoning effort setting (e.g., `low` or `high`).
+The table below is a snapshot of the checked-in `results/results.csv`. Labels follow the run-level identifiers used by the plotting scripts and may reflect either named reasoning efforts or explicit thinking budgets.
 
 | Rank | Model | Solve Rate | Avg Turns / Success | Runs |
 |-----:|-------|----------:|--------------------:|-----:|
-| 1 | Claude Opus 4.6 (low_2048) | 99.29% | 21.13 | 140 |
+| 1 | Claude Opus 4.6 (budget 2048) | 99.29% | 21.13 | 140 |
 | 2 | GPT-5.4 (low) | 98.57% | 23.12 | 140 |
 | 3 | GPT-5.4 Mini (high) | 98.57% | 24.09 | 140 |
-| 4 | Gemini 3.1 Flash Lite (low) | 93.57% | 25.05 | 140 |
+| 4 | Gemini 3.1 Flash Lite | 93.57% | 25.05 | 140 |
 | 5 | GPT-5.4 Mini (low) | 93.57% | 28.24 | 140 |
-| 6 | Claude Sonnet 4.5 (low) | 91.43% | 22.79 | 140 |
-| 7 | Gemini 3 Flash (low) | 90.71% | 21.87 | 140 |
+| 6 | Claude Sonnet 4.5 (budget 2048) | 91.43% | 22.79 | 140 |
+| 7 | Gemini 3 Flash | 90.71% | 21.87 | 140 |
 
-**Key takeaways:**
+**Snapshot takeaways:**
 
 - **Claude Opus 4.6** leads in both solve rate (99.3%) and efficiency (21.1 turns per success), placing it firmly in the "ideal" quadrant of the scatter plot.
 - **Reasoning effort matters.** GPT-5.4 Mini with `high` effort solves 5 percentage points more often than its `low` counterpart, though at a slight cost in average turns.
-- **High solve rate does not guarantee fast solves.** Gemini 3 Flash (low) and Claude Sonnet 4.5 (low) both solve fewer games overall but do so in fewer turns when they succeed. The scatter plot captures this trade-off directly.
+- **High solve rate does not guarantee fast solves.** Gemini 3 Flash and Claude Sonnet 4.5 both solve fewer games overall but do so in fewer turns when they succeed. The scatter plot captures this trade-off directly.
 - All models were judged by the same judge configuration, so differences reflect guesser behavior, not judging variance.
+
+The checked-in overview plot below is generated from `results/results.csv`.
+
+![Model Performance Overview](img/model_overview.png)
+
+See [Reproducibility](docs/reproducibility.md) for the broader workflow and reporting expectations.
 
 ## DWEI Metric (Difficulty-Weighted Efficiency Index)
 
@@ -71,7 +76,7 @@ DWEI addresses these issues by leveraging **survival analysis** and **difficulty
 
 1. **Calculate Target RMQ ($R_{m,i}$):** Each game yields `(turns_used, solved)`. For each `target × model` combination, we fit a Kaplan-Meier survival curve up to the target's maximum recorded turn horizon. The integral (area under this curve) is the Restricted Mean Questions (RMQ), representing the expected number of turns to solve. This cleanly penalizes failures without invoking survivor bias.
 2. **Determine Problem Difficulty ($D_i$):** A target's difficulty is the average RMQ across all evaluated models for that target. Higher $D_i$ means the problem was universally harder.
-3. **Calculate Efficiency Ratio ($1 / RMQ$):** We calculate a speedup ratio for each model on each target:
+3. **Calculate Difficulty-Normalized Efficiency ($D_i / R_{m,i}$):** We calculate a speedup ratio for each model on each target:
    `Efficiency = Difficulty / Target RMQ`
    If a problem's difficulty is 40 turns on average, and a model solves it in 20 turns, its efficiency ratio is 2.0. If it solves an easy 10-turn problem in 5 turns, the ratio is identically 2.0. This ensures that hard problems naturally reward fast, persistent solvers.
 4. **Final Index (DWEI):** We compute the unweighted mean of this efficiency ratio across all targets, then multiply by 100.
@@ -82,19 +87,19 @@ DWEI addresses these issues by leveraging **survival analysis** and **difficulty
 A score of **100** represents the exact benchmark average efficiency. 
 A score of **120** means the model is, on average, solving these targets **20% faster / more efficiently** than the baseline field of evaluated models. 
 
-### Current DWEI rankings
+### Snapshot DWEI rankings
 
 | Rank | Model | DWEI Score |
 |-----:|-------|-----------:|
-| 1 | Claude Opus 4.6 (low) | 123.7 |
+| 1 | Claude Opus 4.6 (budget 2048) | 123.7 |
 | 2 | GPT-5.4 (low) | 112.1 |
 | 3 | GPT-5.4 Mini (high) | 109.3 |
-| 4 | Gemini 3 Flash (low) | 102.6 |
-| 5 | Claude Sonnet 4.5 (low) | 98.7 |
-| 6 | Gemini 3.1 Flash Lite (low) | 92.8 |
+| 4 | Gemini 3 Flash | 102.6 |
+| 5 | Claude Sonnet 4.5 (budget 2048) | 98.7 |
+| 6 | Gemini 3.1 Flash Lite | 92.8 |
 | 7 | GPT-5.4 Mini (low) | 86.5 |
 
-Notably, while some smaller models like **Gemini 3 Flash** or **Claude Sonnet 4.5** have fast median turn times when successful, their ~9% failure rates cause their survival curves to decay slower, keeping their final efficiency index properly anchored near 100. Models like **Claude Opus** maintain near 100% win rates *along* with high speed, resulting in massive efficiency gains.
+Notably, while some smaller models like **Gemini 3 Flash** or **Claude Sonnet 4.5** have fast median turn times when successful, their ~9% failure rates cause their survival curves to decay more slowly, keeping their final efficiency index properly anchored near 100. Models like **Claude Opus** maintain near-100% win rates alongside high speed, resulting in large efficiency gains.
 
 ### Generate the plot
 
@@ -106,7 +111,7 @@ python3 -m analysis.plot_weighted_efficiency \
 
 ![DWEI Model Ranking](img/weighted_efficiency_ranking.png)
 
-## What You Can Do
+## Typical Workflows
 
 - Run a single target game and inspect the full transcript
 - Run repeated evaluation suites across multiple models and targets
@@ -115,16 +120,16 @@ python3 -m analysis.plot_weighted_efficiency \
 
 ## Targets
 
-16 targets across 6 domains:
+21 targets across 6 domains:
 
 | Domain | Targets |
 |--------|---------|
-| animals | elephant, eagle, octopus |
-| characters | Sherlock Holmes |
-| foods | pizza |
-| objects | toothbrush, refrigerator, umbrella, bicycle, laptop, violin |
+| animals | elephant, eagle, octopus, platypus |
+| characters | Sherlock Holmes, Gandalf |
+| foods | pizza, croissant |
+| objects | toothbrush, refrigerator, umbrella, bicycle, laptop, violin, stapler |
 | people | Marie Curie, Abraham Lincoln |
-| places | Paris, Busan, volcano |
+| places | Paris, Busan, volcano, Sahara Desert |
 
 Target records live in [`data/all_target.csv`](data/all_target.csv) and are validated against [`schemas/target.schema.json`](schemas/target.schema.json).
 
@@ -139,9 +144,8 @@ Create a `.env` file:
 
 ```bash
 gemini_key=...
-OPENAI_API_KEY=...
-CLAUDE_API_KEY=...
-# or ANTHROPIC_API_KEY=...
+OPENAI_API_KEY=...      # or openai_key
+CLAUDE_API_KEY=...      # or ANTHROPIC_API_KEY / anthropic_key
 ```
 
 ### Run a Single Game
@@ -153,6 +157,8 @@ python3 -m twentyq.run_single_game \
   --guesser-model gpt-5.4 \
   --judge-model gemini-3-flash-preview
 ```
+
+By default this writes a new run directory under `runs/`.
 
 ### Run a Repeated Suite
 
@@ -196,7 +202,9 @@ python3 -m twentyq.run_single_game \
 
 ## Output & Logging
 
-Each single-game run produces:
+A single game writes one run directory under `runs/` by default. A repeated suite writes a timestamped directory under `reports/single-target-suite/`, with per-run logs under that suite's `runs/` subdirectory.
+
+Each single-game run directory contains:
 
 | Artifact | Description |
 |----------|-------------|
@@ -218,7 +226,7 @@ Suite runs additionally produce:
 
 Cross-suite analysis writes `aggregate.json` and `report.md` under `reports/single-target-suite/benchmark-analysis/`.
 
-## Scope
+## Interpretation
 
 This repository is best used as a controlled interactive benchmark:
 
@@ -240,15 +248,16 @@ twentyq/
 
 analysis/
   analyze_single_target_suite.py  # cross-suite aggregation
-  plot_model_overview.py          # overview scatter plot
+  plot_model_overview.py          # solve-rate vs turns scatter plot
+  plot_weighted_efficiency.py     # DWEI ranking plot
 
 configs/single_target_suites/     # suite configuration files
 data/                             # target records
 docs/                             # benchmark scope and reproducibility notes
 img/                              # generated and checked-in images
-project_review/                   # external critique notes and adjudication
 prompts/                          # guesser and judge prompt templates
 reports/                          # generated run outputs (gitignored)
+results/                          # checked-in run-level CSV snapshots
 schemas/                          # target schema
 tests/                            # unit tests
 ```
