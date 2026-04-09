@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import csv
+import tempfile
 import unittest
+from pathlib import Path
 
-from analysis.plot_weighted_efficiency import RunRecord, compute_scores, harmonic_mean
+from analysis.plot_weighted_efficiency import RunRecord, compute_scores, harmonic_mean, load_records
 
 
 class PlotWeightedEfficiencyTests(unittest.TestCase):
@@ -31,6 +34,40 @@ class PlotWeightedEfficiencyTests(unittest.TestCase):
         average_score = sum(score.overall_score for score in scores) / len(scores)
         self.assertAlmostEqual(average_score, 100.0)
         self.assertEqual([score.guesser_w_effort for score in scores], ["fast", "mid", "slow"])
+
+    def test_load_records_restores_missing_guesser_w_effort(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "results.csv"
+            with path.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=[
+                        "target_id",
+                        "guesser_model",
+                        "guesser_reasoning_effort",
+                        "guesser_w_effort",
+                        "turns_used",
+                        "solved",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "target_id": "place_busan",
+                        "guesser_model": "gpt-5",
+                        "guesser_reasoning_effort": "low",
+                        "guesser_w_effort": None,
+                        "turns_used": "15",
+                        "solved": "True",
+                    }
+                )
+
+            records = load_records(path)
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].guesser_w_effort, "gpt-5_low")
+        self.assertEqual(records[0].turns_used, 15)
+        self.assertTrue(records[0].solved)
 
 
 if __name__ == "__main__":

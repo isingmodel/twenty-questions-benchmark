@@ -68,6 +68,10 @@ _FALLBACK_COLOR = "#888888"
 _FALLBACK_MARKER = "o"
 
 
+def _clean_cell(value: object) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
 def _color_for(guesser_w_effort: str) -> str:
     style = _STYLE.get(guesser_w_effort)
     return style[0] if style else _FALLBACK_COLOR
@@ -94,15 +98,18 @@ def load_from_csv(path: Path) -> list[PlotRow]:
     with path.open(encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            gwe = row.get("guesser_w_effort", "").strip()
+            gwe = _clean_cell(row.get("guesser_w_effort"))
             if not gwe:
                 # fall back to model + effort
-                gwe = row.get("guesser_model", "").strip() + "_" + row.get("guesser_reasoning_effort", "").strip()
-            if not gwe or not row.get("turns_used", "").strip():
+                guesser_model = _clean_cell(row.get("guesser_model"))
+                reasoning_effort = _clean_cell(row.get("guesser_reasoning_effort"))
+                gwe = f"{guesser_model}_{reasoning_effort}" if guesser_model and reasoning_effort else guesser_model
+            turns_used = _clean_cell(row.get("turns_used"))
+            if not gwe or not turns_used:
                 continue
             by_model[gwe].append({
-                "solved": row.get("solved", "").strip().lower() == "true",
-                "turns_used": int(row["turns_used"].strip()),
+                "solved": _clean_cell(row.get("solved")).lower() == "true",
+                "turns_used": int(turns_used),
             })
 
     rows: list[PlotRow] = []

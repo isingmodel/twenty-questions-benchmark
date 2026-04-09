@@ -43,18 +43,21 @@ The table below is a snapshot of the checked-in `results/results.csv`. Labels fo
 | 1 | Claude Opus 4.6 (budget 2048) | 99.29% | 21.73 | 140 |
 | 2 | GPT-5.4 (low) | 98.57% | 23.10 | 140 |
 | 3 | GPT-5.4 Mini (high) | 98.57% | 24.09 | 140 |
-| 4 | Gemini 3.1 Flash Lite | 93.57% | 25.55 | 140 |
-| 5 | GPT-5.4 Mini (low) | 93.57% | 28.24 | 140 |
-| 6 | Claude Sonnet 4.5 (budget 2048) | 90.71% | 22.90 | 140 |
-| 7 | Gemini 3 Flash | 88.57% | 21.56 | 140 |
+| 4 | GPT-5 (low) | 98.56% | 22.20 | 139 |
+| 5 | Gemini 3.1 Flash Lite | 93.57% | 25.55 | 140 |
+| 6 | GPT-5.4 Mini (low) | 93.57% | 28.24 | 140 |
+| 7 | Claude Sonnet 4.5 (budget 2048) | 90.71% | 22.90 | 140 |
+| 8 | Gemini 3 Flash | 88.57% | 21.56 | 140 |
+| 9 | GPT-4o | 83.57% | 21.87 | 140 |
 
 
 **Snapshot takeaways:**
 
-- **Claude Opus 4.6** still leads overall, pairing a 99.3% solve rate with 21.7 turns per success and staying closest to the "ideal" quadrant.
-- **Reasoning effort matters.** GPT-5.4 Mini with `high` effort solves 5 percentage points more often than its `low` counterpart and also uses fewer turns on successful runs in this snapshot.
-- **High solve rate does not guarantee the fastest solves.** Gemini 3 Flash now has the lowest turns-per-success figure in the table (21.6) but its lower solve rate (88.6%) keeps it behind the top models overall.
-- All models were judged by the same judge configuration, so differences reflect guesser behavior, not judging variance.
+- **Claude Opus 4.6** remains the clearest all-around leader, combining a near-perfect solve rate (99.3%) with low turn count (21.7 turns per success).
+- **GPT-5 and GPT-5.4 are the strongest OpenAI variants in this snapshot.** GPT-5 (`low`) nearly matches the top solve rate while staying materially more efficient than GPT-5.4 (`low`) on successful games.
+- **Reasoning effort matters for GPT-5.4 Mini.** Moving from `low` to `high` improves solve rate by 5 percentage points and trims about 4 successful turns on average.
+- **Fast successful solves are not enough on their own.** Gemini 3 Flash and GPT-4o solve quickly when they do succeed, but their lower solve rates keep them well outside the top tier of the overview plot.
+- All models were judged by the same judge configuration, so the differences shown here are best read as guesser-side behavior under a fixed protocol rather than judge variance.
 
 The checked-in overview plot below is generated from `results/results.csv`.
 
@@ -95,15 +98,17 @@ A score of **120** means the model is, on average, solving these targets **20% f
 
 | Rank | Model | DWEI Score |
 |-----:|-------|-----------:|
-| 1 | Claude Opus 4.6 (budget 2048) | 122.1 |
-| 2 | GPT-5.4 (low) | 113.8 |
-| 3 | GPT-5.4 Mini (high) | 110.8 |
-| 4 | Gemini 3 Flash | 100.1 |
-| 5 | Claude Sonnet 4.5 (budget 2048) | 98.0 |
-| 6 | Gemini 3.1 Flash Lite | 93.2 |
-| 7 | GPT-5.4 Mini (low) | 87.8 |
+| 1 | Claude Opus 4.6 (budget 2048) | 116.5 |
+| 2 | GPT-5 (low) | 115.3 |
+| 3 | GPT-5.4 (low) | 108.5 |
+| 4 | GPT-5.4 Mini (high) | 105.9 |
+| 5 | Gemini 3 Flash | 95.6 |
+| 6 | Claude Sonnet 4.5 (budget 2048) | 93.7 |
+| 7 | GPT-4o | 90.8 |
+| 8 | Gemini 3.1 Flash Lite | 89.6 |
+| 9 | GPT-5.4 Mini (low) | 84.0 |
 
-Notably, while models like **Gemini 3 Flash** and **Claude Sonnet 4.5** can be quite fast when they do solve, their roughly 11% and 9% failure rates keep their DWEI scores near the benchmark baseline. Models like **Claude Opus** maintain near-perfect solve rates alongside high speed, which is why their efficiency index remains well above 120.
+Under the harmonic-RMQ normalization, **100** is the exact benchmark-average speed across the evaluated field. That makes the mid-table easier to read: **Gemini 3 Flash** sits just below average because its fast successful runs are offset by a lower solve rate, while **Claude Sonnet 4.5** lands in a similar band for the same basic reason. **GPT-4o** and **Gemini 3.1 Flash Lite** are also close enough in score that the ordering should not be over-interpreted; the more durable conclusion is that both cluster below the benchmark average, while **GPT-5**, **GPT-5.4**, and **Claude Opus** form the clearly above-baseline group.
 
 ### Generate the plot
 

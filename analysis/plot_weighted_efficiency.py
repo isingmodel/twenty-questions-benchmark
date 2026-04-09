@@ -61,6 +61,10 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _clean_cell(value: object) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
 def load_records(path: Path) -> list[RunRecord]:
     records: list[RunRecord] = []
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -70,10 +74,16 @@ def load_records(path: Path) -> list[RunRecord]:
         if missing:
             raise ValueError(f"Missing required columns: {sorted(missing)}")
         for row in reader:
-            target_id = str(row["target_id"]).strip()
-            guesser_w_effort = str(row["guesser_w_effort"]).strip()
-            turns_raw = str(row["turns_used"]).strip()
-            solved_raw = str(row["solved"]).strip().lower()
+            target_id = _clean_cell(row.get("target_id"))
+            guesser_w_effort = _clean_cell(row.get("guesser_w_effort"))
+            if not guesser_w_effort:
+                guesser_model = _clean_cell(row.get("guesser_model"))
+                reasoning_effort = _clean_cell(row.get("guesser_reasoning_effort"))
+                guesser_w_effort = (
+                    f"{guesser_model}_{reasoning_effort}" if guesser_model and reasoning_effort else guesser_model
+                )
+            turns_raw = _clean_cell(row.get("turns_used"))
+            solved_raw = _clean_cell(row.get("solved")).lower()
             if not target_id or not guesser_w_effort or not turns_raw:
                 continue
             try:
