@@ -17,6 +17,8 @@ DEFAULT_OUTPUT_PATH = _REPO_ROOT / "img" / "model_overview.png"
 
 # Keys are raw guesser_w_effort values from results.csv.
 LABEL_MAP: dict[str, str] = {
+    "gpt-4o": "GPT-4o",
+    "gpt-5_low": "GPT-5 (low)",
     "gpt-5.4_low": "GPT-5.4 (low)",
     "gpt-5.4_high": "GPT-5.4 (high)",
     "gpt-5.4-mini_low": "GPT-5.4 Mini (low)",
@@ -40,6 +42,8 @@ LABEL_MAP: dict[str, str] = {
 # Unique color + marker per guesser_w_effort.
 _STYLE: dict[str, tuple[str, str]] = {
     # (color, marker)
+    "gpt-4o":                              ("#5B6C8F", "X"),
+    "gpt-5_low":                           ("#2D6FB7", "P"),
     "gpt-5.4_low":                          ("#4A90D9", "o"),
     "gpt-5.4_high":                         ("#4A90D9", "*"),
     "gpt-5.4-mini_low":                     ("#7EC8E3", "s"),

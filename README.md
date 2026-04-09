@@ -48,6 +48,7 @@ The table below is a snapshot of the checked-in `results/results.csv`. Labels fo
 | 6 | Claude Sonnet 4.5 (budget 2048) | 90.71% | 22.90 | 140 |
 | 7 | Gemini 3 Flash | 88.57% | 21.56 | 140 |
 
+
 **Snapshot takeaways:**
 
 - **Claude Opus 4.6** still leads overall, pairing a 99.3% solve rate with 21.7 turns per success and staying closest to the "ideal" quadrant.
@@ -75,17 +76,20 @@ DWEI addresses these issues by leveraging **survival analysis** and **difficulty
 ### How it works
 
 1. **Calculate Target RMQ ($R_{m,i}$):** Each game yields `(turns_used, solved)`. For each `target × model` combination, we fit a Kaplan-Meier survival curve up to the target's maximum recorded turn horizon. The integral (area under this curve) is the Restricted Mean Questions (RMQ), representing the expected number of turns to solve. This cleanly penalizes failures without invoking survivor bias.
-2. **Determine Problem Difficulty ($D_i$):** A target's difficulty is the average RMQ across all evaluated models for that target. Higher $D_i$ means the problem was universally harder.
-3. **Calculate Difficulty-Normalized Efficiency ($D_i / R_{m,i}$):** We calculate a speedup ratio for each model on each target:
-   `Efficiency = Difficulty / Target RMQ`
-   If a problem's difficulty is 40 turns on average, and a model solves it in 20 turns, its efficiency ratio is 2.0. If it solves an easy 10-turn problem in 5 turns, the ratio is identically 2.0. This ensures that hard problems naturally reward fast, persistent solvers.
-4. **Final Index (DWEI):** We compute the unweighted mean of this efficiency ratio across all targets, then multiply by 100.
-   `DWEI = 100 × Mean( D_i / R_{m,i} )`
+2. **Determine Problem Difficulty ($D_i$):** For descriptive reporting, a target's difficulty is the arithmetic-mean RMQ across all evaluated models for that target. Higher $D_i$ means the problem was universally harder.
+3. **Build a Target Efficiency Baseline ($B_i$):** To normalize scores, we use the **harmonic mean** of per-model RMQs on that target:
+   `B_i = HarmonicMean(R_{m,i})`
+   This is the right baseline for a ratio-of-speeds metric, and it guarantees that the average model score remains exactly centered at 100.
+4. **Calculate Difficulty-Normalized Efficiency ($B_i / R_{m,i}$):** We calculate a speed ratio for each model on each target:
+   `Efficiency = Baseline RMQ / Target RMQ`
+   If a hard target has a baseline RMQ of 40 and a model solves it in 20 expected turns, its efficiency ratio is 2.0. If an easy target has a baseline RMQ of 10 and the model solves it in 5 expected turns, the ratio is also 2.0.
+5. **Final Index (DWEI):** We compute the unweighted mean of this efficiency ratio across all targets, then multiply by 100.
+   `DWEI = 100 × Mean( B_i / R_{m,i} )`
 
 ### Interpreting the score
 
-A score of **100** represents the exact benchmark average efficiency. 
-A score of **120** means the model is, on average, solving these targets **20% faster / more efficiently** than the baseline field of evaluated models. 
+A score of **100** represents the exact benchmark-average speed across the evaluated model field. 
+A score of **120** means the model is, on average, solving these targets **20% faster / more efficiently** than the benchmark baseline. 
 
 ### Snapshot DWEI rankings
 
