@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 target_id,variant_label,repetition_index,guesser_model,judge_model,guesser_reasoning_effort,judge_reasoning_effort,guesser_reasoning,judge_reasoning,run_id,mode,target_name,solved,turns_used,false_positive,final_question,final_question_correct,error,error_type,guesser_w_effort
 place_busan,claude-opus-4-6,1,claude-opus-4-6,gpt-5.4-mini,budget_2048,low,{'thinking_budget': 2048},{'reasoning_effort': 'low'},run-0001__full-game-test__anthropic__claude-opus-4-6,full-game-test,Busan,True,14,,Is the hidden target Busan?,True,,,claude-opus-4-6_budget_2048
 character_gandalf,claude-opus-4-6,1,claude-opus-4-6,gpt-5.4-mini,budget_2048,low,{'thinking_budget': 2048},{'reasoning_effort': 'low'},run-0001__full-game-test__anthropic__claude-opus-4-6,full-game-test,Gandalf,True,21,,Is the character Gandalf?,True,,,claude-opus-4-6_budget_2048

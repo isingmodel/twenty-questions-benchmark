@@ -16,6 +16,8 @@ DEFAULT_INPUT_PATH = _REPO_ROOT / "results" / "results.csv"
 DEFAULT_OUTPUT_PATH = _REPO_ROOT / "img" / "weighted_efficiency_ranking.png"
 
 LABEL_MAP: dict[str, str] = {
+    "gpt-4o": "GPT-4o",
+    "gpt-5_low": "GPT-5 (low)",
     "gpt-5.4_low": "GPT-5.4 (low)",
     "gpt-5.4_high": "GPT-5.4 (high)",
     "gpt-5.4-mini_low": "GPT-5.4 Mini (low)",
@@ -122,6 +124,15 @@ def km_rmq(runs: Iterable[RunRecord], tau: int) -> float:
     return rmq
 
 
+def harmonic_mean(values: Iterable[float]) -> float:
+    items = list(values)
+    if not items:
+        raise ValueError("harmonic_mean requires at least one value")
+    if any(value <= 0 for value in items):
+        raise ValueError("harmonic_mean requires strictly positive values")
+    return len(items) / sum(1.0 / value for value in items)
+
+
 def compute_scores(records: list[RunRecord]) -> tuple[list[ModelScore], dict[str, float]]:
     by_target_model: dict[tuple[str, str], list[RunRecord]] = defaultdict(list)
     by_target: dict[str, list[RunRecord]] = defaultdict(list)
@@ -146,21 +157,22 @@ def compute_scores(records: list[RunRecord]) -> tuple[list[ModelScore], dict[str
                 rmq_by_target_model[(target_id, model)] = km_rmq(runs, tau)
 
     difficulty_by_target: dict[str, float] = {}
+    baseline_by_target: dict[str, float] = {}
     for target_id in targets:
         rmqs = [rmq_by_target_model.get((target_id, m)) for m in models if (target_id, m) in rmq_by_target_model]
         if rmqs:
             difficulty_by_target[target_id] = sum(rmqs) / len(rmqs)
-            
+            baseline_by_target[target_id] = harmonic_mean(rmqs)
+
     model_scores: list[ModelScore] = []
     for model in models:
         effs = {}
         for target_id in targets:
             rmq = rmq_by_target_model.get((target_id, model))
-            diff = difficulty_by_target.get(target_id)
-            if rmq is not None and diff is not None and rmq > 0:
-                # E = 100 * (Difficulty / RMQ)
-                # 100 is benchmark average. Higher is faster/better.
-                eff = 100.0 * (diff / rmq)
+            baseline = baseline_by_target.get(target_id)
+            if rmq is not None and baseline is not None and rmq > 0:
+                # Normalize by the harmonic-mean RMQ so the model-average score is 100.
+                eff = 100.0 * (baseline / rmq)
                 effs[target_id] = eff
                 
         if effs:
@@ -209,7 +221,7 @@ def plot_scores_matplotlib(scores: list[ModelScore], output_path: Path) -> None:
 
     ax.axvline(x=100.0, color="#6B7280", linestyle="--", linewidth=1.5, zorder=0)
 
-    ax.set_xlabel("Efficiency Index (100 = Benchmark Average, Higher is Better)", fontsize=12, fontweight="bold")
+    ax.set_xlabel("Efficiency Index (100 = Benchmark Average Speed, Higher is Better)", fontsize=12, fontweight="bold")
     ax.set_yticks(y_positions)
     ax.set_yticklabels(y_labels, fontsize=11, fontweight="medium")
     
@@ -245,7 +257,7 @@ def main() -> None:
     print("\n" + "="*80)
     print(" DIFFICULTY-WEIGHTED EFFICIENCY INDEX (DWEI)".center(80))
     print("="*80)
-    print("Baseline (100) = Average Efficiency among evaluated models")
+    print("Baseline (100) = Average speed among evaluated models")
     print("-" * 80)
     print(f"{'Rank':<5} | {'Model':<35} | {'Score (>100 is Better)'}")
     print("-" * 80)
