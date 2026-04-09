@@ -40,19 +40,19 @@ The table below is a snapshot of the checked-in `results/results.csv`. Labels fo
 
 | Rank | Model | Solve Rate | Avg Turns / Success | Runs |
 |-----:|-------|----------:|--------------------:|-----:|
-| 1 | Claude Opus 4.6 (budget 2048) | 99.29% | 21.13 | 140 |
-| 2 | GPT-5.4 (low) | 98.57% | 23.12 | 140 |
+| 1 | Claude Opus 4.6 (budget 2048) | 99.29% | 21.73 | 140 |
+| 2 | GPT-5.4 (low) | 98.57% | 23.10 | 140 |
 | 3 | GPT-5.4 Mini (high) | 98.57% | 24.09 | 140 |
-| 4 | Gemini 3.1 Flash Lite | 93.57% | 25.05 | 140 |
+| 4 | Gemini 3.1 Flash Lite | 93.57% | 25.55 | 140 |
 | 5 | GPT-5.4 Mini (low) | 93.57% | 28.24 | 140 |
-| 6 | Claude Sonnet 4.5 (budget 2048) | 91.43% | 22.79 | 140 |
-| 7 | Gemini 3 Flash | 90.71% | 21.87 | 140 |
+| 6 | Claude Sonnet 4.5 (budget 2048) | 90.71% | 22.90 | 140 |
+| 7 | Gemini 3 Flash | 88.57% | 21.56 | 140 |
 
 **Snapshot takeaways:**
 
-- **Claude Opus 4.6** leads in both solve rate (99.3%) and efficiency (21.1 turns per success), placing it firmly in the "ideal" quadrant of the scatter plot.
-- **Reasoning effort matters.** GPT-5.4 Mini with `high` effort solves 5 percentage points more often than its `low` counterpart, though at a slight cost in average turns.
-- **High solve rate does not guarantee fast solves.** Gemini 3 Flash and Claude Sonnet 4.5 both solve fewer games overall but do so in fewer turns when they succeed. The scatter plot captures this trade-off directly.
+- **Claude Opus 4.6** still leads overall, pairing a 99.3% solve rate with 21.7 turns per success and staying closest to the "ideal" quadrant.
+- **Reasoning effort matters.** GPT-5.4 Mini with `high` effort solves 5 percentage points more often than its `low` counterpart and also uses fewer turns on successful runs in this snapshot.
+- **High solve rate does not guarantee the fastest solves.** Gemini 3 Flash now has the lowest turns-per-success figure in the table (21.6) but its lower solve rate (88.6%) keeps it behind the top models overall.
 - All models were judged by the same judge configuration, so differences reflect guesser behavior, not judging variance.
 
 The checked-in overview plot below is generated from `results/results.csv`.
@@ -91,15 +91,15 @@ A score of **120** means the model is, on average, solving these targets **20% f
 
 | Rank | Model | DWEI Score |
 |-----:|-------|-----------:|
-| 1 | Claude Opus 4.6 (budget 2048) | 123.7 |
-| 2 | GPT-5.4 (low) | 112.1 |
-| 3 | GPT-5.4 Mini (high) | 109.3 |
-| 4 | Gemini 3 Flash | 102.6 |
-| 5 | Claude Sonnet 4.5 (budget 2048) | 98.7 |
-| 6 | Gemini 3.1 Flash Lite | 92.8 |
-| 7 | GPT-5.4 Mini (low) | 86.5 |
+| 1 | Claude Opus 4.6 (budget 2048) | 122.1 |
+| 2 | GPT-5.4 (low) | 113.8 |
+| 3 | GPT-5.4 Mini (high) | 110.8 |
+| 4 | Gemini 3 Flash | 100.1 |
+| 5 | Claude Sonnet 4.5 (budget 2048) | 98.0 |
+| 6 | Gemini 3.1 Flash Lite | 93.2 |
+| 7 | GPT-5.4 Mini (low) | 87.8 |
 
-Notably, while some smaller models like **Gemini 3 Flash** or **Claude Sonnet 4.5** have fast median turn times when successful, their ~9% failure rates cause their survival curves to decay more slowly, keeping their final efficiency index properly anchored near 100. Models like **Claude Opus** maintain near-100% win rates alongside high speed, resulting in large efficiency gains.
+Notably, while models like **Gemini 3 Flash** and **Claude Sonnet 4.5** can be quite fast when they do solve, their roughly 11% and 9% failure rates keep their DWEI scores near the benchmark baseline. Models like **Claude Opus** maintain near-perfect solve rates alongside high speed, which is why their efficiency index remains well above 120.
 
 ### Generate the plot
 
