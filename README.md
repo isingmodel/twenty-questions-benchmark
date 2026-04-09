@@ -36,89 +36,41 @@ One model acts as the guesser. Another acts as the judge. The protocol is intent
 
 ## Benchmark Results
 
-The table below is a snapshot of the checked-in `results/results.csv`. Labels follow the run-level identifiers used by the plotting scripts and may reflect either named reasoning efforts or explicit thinking budgets.
+The primary checked-in snapshot now reports **Solve@20**, **Solve@40**, and **Solve@60** from `results/results.csv`. This keeps the metric family simple and makes ceiling sensitivity explicit instead of hiding it inside a single aggregate score.
 
-| Rank | Model | Solve Rate | Avg Turns / Success | Runs |
-|-----:|-------|----------:|--------------------:|-----:|
-| 1 | Claude Opus 4.6 (budget 2048) | 99.29% | 21.73 | 140 |
-| 2 | GPT-5.4 (low) | 98.57% | 23.10 | 140 |
-| 3 | GPT-5.4 Mini (high) | 98.57% | 24.09 | 140 |
-| 4 | GPT-5 (low) | 98.56% | 22.20 | 139 |
-| 5 | Gemini 3.1 Flash Lite | 93.57% | 25.55 | 140 |
-| 6 | GPT-5.4 Mini (low) | 93.57% | 28.24 | 140 |
-| 7 | Claude Sonnet 4.5 (budget 2048) | 90.71% | 22.90 | 140 |
-| 8 | Gemini 3 Flash | 88.57% | 21.56 | 140 |
-| 9 | GPT-4o | 83.57% | 21.87 | 140 |
-
+| Rank | Model | Solve@20 | Solve@40 | Solve@60 | Runs |
+|-----:|-------|---------:|---------:|---------:|-----:|
+| 1 | Claude Opus 4.6 (budget 2048) | 62.14% | 91.43% | 98.57% | 140 |
+| 2 | GPT-5 (low) | 60.43% | 91.37% | 96.40% | 139 |
+| 3 | GPT-5.4 (low) | 50.71% | 90.00% | 98.57% | 140 |
+| 4 | GPT-5.4 Mini (high) | 45.00% | 88.57% | 97.14% | 140 |
+| 5 | Gemini 3 Flash | 55.71% | 80.00% | 86.43% | 140 |
+| 6 | Claude Sonnet 4.5 (budget 2048) | 54.29% | 80.71% | 88.57% | 140 |
+| 7 | GPT-4o | 52.14% | 75.00% | 81.43% | 140 |
+| 8 | Gemini 3.1 Flash Lite | 45.71% | 80.00% | 92.14% | 140 |
+| 9 | GPT-5.4 Mini (low) | 41.43% | 73.57% | 90.00% | 140 |
 
 **Snapshot takeaways:**
 
-- **Claude Opus 4.6** remains the clearest all-around leader, combining a near-perfect solve rate (99.3%) with low turn count (21.7 turns per success).
-- **GPT-5 and GPT-5.4 are the strongest OpenAI variants in this snapshot.** GPT-5 (`low`) nearly matches the top solve rate while staying materially more efficient than GPT-5.4 (`low`) on successful games.
-- **Reasoning effort matters for GPT-5.4 Mini.** Moving from `low` to `high` improves solve rate by 5 percentage points and trims about 4 successful turns on average.
-- **Fast successful solves are not enough on their own.** Gemini 3 Flash and GPT-4o solve quickly when they do succeed, but their lower solve rates keep them well outside the top tier of the overview plot.
+- **Claude Opus 4.6** is the clearest all-around leader across the three cutoffs, with the strongest early conversion rate at 20 turns and the strongest overall completion rate by 60 turns.
+- **GPT-5 and GPT-5.4 stay close to the top, but with different shapes.** GPT-5 (`low`) is stronger at 20 and 40 turns, while GPT-5.4 (`low`) catches up by 60 turns.
+- **Reasoning effort matters for GPT-5.4 Mini.** The `high` setting improves Solve@20 by 3.6 points, Solve@40 by 15.0 points, and Solve@60 by 7.1 points over the `low` setting.
+- **Gemini 3 Flash and GPT-4o look better on short-horizon speed than on longer-horizon completion.** Both are competitive at 20 turns, but by 60 turns they sit clearly below the leading group.
+- **Gemini 3.1 Flash Lite is the opposite profile.** Its Solve@20 is modest, but it recovers much more strongly by 60 turns, suggesting slower but steadier convergence.
 - All models were judged by the same judge configuration, so the differences shown here are best read as guesser-side behavior under a fixed protocol rather than judge variance.
 
-The checked-in overview plot below is generated from `results/results.csv`.
-
-![Model Performance Overview](img/model_overview.png)
-
-See [Reproducibility](docs/reproducibility.md) for the broader workflow and reporting expectations.
-
-## DWEI Metric (Difficulty-Weighted Efficiency Index)
-
-### Why a specialized metric?
-
-Solve rate and average turns are useful but incomplete. 
-- A model that solves 95% of games in 40 turns each is arguably worse than one that solves 90% in 15 turns. 
-- When a model *fails* to solve a target, it hits the maximum budget (e.g., 40 or 80 turns). Excluding these failures causes extreme **survivor bias**, making models that only solve easy problems look artificially fast.
-- Easy problems and hard problems take vastly different numbers of turns. A simple turn difference on an easy problem should not carry the same absolute weight as a difference on a hard problem.
-
-DWEI addresses these issues by leveraging **survival analysis** and **difficulty-weighting** to create a mathematically robust and intuitive "efficiency index".
-
-### How it works
-
-1. **Calculate Target RMQ ($R_{m,i}$):** Each game yields `(turns_used, solved)`. For each `target × model` combination, we fit a Kaplan-Meier survival curve up to the target's maximum recorded turn horizon. The integral (area under this curve) is the Restricted Mean Questions (RMQ), representing the expected number of turns to solve. This cleanly penalizes failures without invoking survivor bias.
-2. **Determine Problem Difficulty ($D_i$):** For descriptive reporting, a target's difficulty is the arithmetic-mean RMQ across all evaluated models for that target. Higher $D_i$ means the problem was universally harder.
-3. **Build a Target Efficiency Baseline ($B_i$):** To normalize scores, we use the **harmonic mean** of per-model RMQs on that target:
-   `B_i = HarmonicMean(R_{m,i})`
-   This is the right baseline for a ratio-of-speeds metric, and it guarantees that the average model score remains exactly centered at 100.
-4. **Calculate Difficulty-Normalized Efficiency ($B_i / R_{m,i}$):** We calculate a speed ratio for each model on each target:
-   `Efficiency = Baseline RMQ / Target RMQ`
-   If a hard target has a baseline RMQ of 40 and a model solves it in 20 expected turns, its efficiency ratio is 2.0. If an easy target has a baseline RMQ of 10 and the model solves it in 5 expected turns, the ratio is also 2.0.
-5. **Final Index (DWEI):** We compute the unweighted mean of this efficiency ratio across all targets, then multiply by 100.
-   `DWEI = 100 × Mean( B_i / R_{m,i} )`
-
-### Interpreting the score
-
-A score of **100** represents the exact benchmark-average speed across the evaluated model field. 
-A score of **120** means the model is, on average, solving these targets **20% faster / more efficiently** than the benchmark baseline. 
-
-### Snapshot DWEI rankings
-
-| Rank | Model | DWEI Score |
-|-----:|-------|-----------:|
-| 1 | Claude Opus 4.6 (budget 2048) | 116.5 |
-| 2 | GPT-5 (low) | 115.3 |
-| 3 | GPT-5.4 (low) | 108.5 |
-| 4 | GPT-5.4 Mini (high) | 105.9 |
-| 5 | Gemini 3 Flash | 95.6 |
-| 6 | Claude Sonnet 4.5 (budget 2048) | 93.7 |
-| 7 | GPT-4o | 90.8 |
-| 8 | Gemini 3.1 Flash Lite | 89.6 |
-| 9 | GPT-5.4 Mini (low) | 84.0 |
-
-Under the harmonic-RMQ normalization, **100** is the exact benchmark-average speed across the evaluated field. That makes the mid-table easier to read: **Gemini 3 Flash** sits just below average because its fast successful runs are offset by a lower solve rate, while **Claude Sonnet 4.5** lands in a similar band for the same basic reason. **GPT-4o** and **Gemini 3.1 Flash Lite** are also close enough in score that the ordering should not be over-interpreted; the more durable conclusion is that both cluster below the benchmark average, while **GPT-5**, **GPT-5.4**, and **Claude Opus** form the clearly above-baseline group.
-
-### Generate the plot
+The checked-in cutoff plot below is generated from `results/results.csv`.
 
 ```bash
-python3 -m analysis.plot_weighted_efficiency \
+python3 -m analysis.plot_solve_at_cutoffs \
   --input results/results.csv \
-  --output img/weighted_efficiency_ranking.png
+  --output img/solve_at_cutoffs.png \
+  --cutoffs 20,40,60
 ```
 
-![DWEI Model Ranking](img/weighted_efficiency_ranking.png)
+![Solve At Cutoffs](img/solve_at_cutoffs.png)
+
+See [Reproducibility](docs/reproducibility.md) for the broader workflow and reporting expectations.
 
 ## Typical Workflows
 
@@ -258,6 +210,7 @@ twentyq/
 analysis/
   analyze_single_target_suite.py  # cross-suite aggregation
   plot_model_overview.py          # solve-rate vs turns scatter plot
+  plot_solve_at_cutoffs.py        # grouped Solve@20 / Solve@40 / Solve@60 bars
   plot_weighted_efficiency.py     # DWEI ranking plot
 
 configs/single_target_suites/     # suite configuration files
