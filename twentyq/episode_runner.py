@@ -34,6 +34,8 @@ DEFAULT_JUDGE_MODEL = "gemini-3-flash-preview"
 JUDGMENT_TRUE = "Yes"
 JUDGMENT_FALSE = "No"
 JUDGMENT_AMBIGUOUS = "Ambiguous"
+QUESTION_TYPE_IDENTITY = "identity"
+QUESTION_TYPE_NON_IDENTITY = "non_identity"
 GEMINI_25_THINKING_BUDGET_BY_EFFORT = {
     "minimal": 1024,
     "low": 1024,
@@ -173,6 +175,8 @@ MODEL_REASONING_CAPABILITIES = (
 class JudgeDecision:
     label: str
     reason: str | None = None
+    question_type: str | None = None
+    direct_target_guess: bool | None = None
 
 
 @dataclass
@@ -296,15 +300,6 @@ def _call_model(client: Any, method_name: str, **kwargs: Any) -> tuple[Any, int]
     return value, latency_ms
 
 
-def _normalize_text(text: str) -> str:
-    value = re.sub(r"[^a-z0-9 ]+", " ", text.lower())
-    value = re.sub(r"\s+", " ", value).strip()
-    for prefix in ("a ", "an ", "the "):
-        if value.startswith(prefix):
-            value = value[len(prefix) :]
-    return value.strip()
-
-
 def _normalize_judge_output(raw_output: str) -> str:
     normalized = re.sub(r"[`*_]+", "", str(raw_output)).strip().lower()
     normalized = re.sub(r"\s+", " ", normalized)
@@ -321,13 +316,35 @@ def _normalize_judge_output(raw_output: str) -> str:
     raise ValueError(f"Unrecognized judge output: {raw_output!r}")
 
 
-def _parse_judge_response(raw_output: str) -> JudgeDecision:
+def _normalize_judge_question_type(raw_value: Any) -> str:
+    normalized = str(raw_value).strip().lower().replace("-", "_").replace(" ", "_")
+    if normalized in {"identity", "identity_check", "direct_guess", "direct_identity"}:
+        return QUESTION_TYPE_IDENTITY
+    if normalized in {"non_identity", "attribute", "descriptive", "category"}:
+        return QUESTION_TYPE_NON_IDENTITY
+    raise ValueError(f"Unrecognized judge question_type: {raw_value!r}")
+
+
+def _parse_bool_field(raw_value: Any, field_name: str) -> bool:
+    if isinstance(raw_value, bool):
+        return raw_value
+    normalized = str(raw_value).strip().lower()
+    if normalized in {"true", "yes", "1"}:
+        return True
+    if normalized in {"false", "no", "0"}:
+        return False
+    raise ValueError(f"Unrecognized boolean value for {field_name}: {raw_value!r}")
+
+
+def _parse_judge_response(raw_output: str, *, require_structured: bool = False) -> JudgeDecision:
     raw_text = str(raw_output).strip()
     if not raw_text:
         raise ValueError("Judge returned empty output")
 
     label_source = raw_text
     reason: str | None = None
+    question_type: str | None = None
+    direct_target_guess: bool | None = None
     json_match = re.search(r"\{[\s\S]*\}", raw_text)
     if json_match:
         try:
@@ -340,8 +357,34 @@ def _parse_judge_response(raw_output: str) -> JudgeDecision:
             if raw_reason is not None:
                 normalized_reason = str(raw_reason).strip()
                 reason = normalized_reason or None
+            raw_question_type = parsed.get("question_type", parsed.get("question_kind"))
+            if raw_question_type is not None:
+                question_type = _normalize_judge_question_type(raw_question_type)
+            raw_direct_target_guess = parsed.get(
+                "direct_target_guess",
+                parsed.get("identity_match", parsed.get("is_correct_guess")),
+            )
+            if raw_direct_target_guess is not None:
+                direct_target_guess = _parse_bool_field(raw_direct_target_guess, "direct_target_guess")
+    elif require_structured:
+        raise ValueError(f"Judge must return a JSON object, got: {raw_output!r}")
 
-    return JudgeDecision(label=_normalize_judge_output(label_source), reason=reason)
+    label = _normalize_judge_output(label_source)
+    if require_structured and question_type is None:
+        raise ValueError(f"Judge response missing question_type: {raw_output!r}")
+    if require_structured and direct_target_guess is None:
+        raise ValueError(f"Judge response missing direct_target_guess: {raw_output!r}")
+    if direct_target_guess is True and question_type != QUESTION_TYPE_IDENTITY:
+        raise ValueError("Judge marked a non-identity question as a direct target guess")
+    if direct_target_guess is True and label != JUDGMENT_TRUE:
+        raise ValueError("Judge marked a direct target guess as solved without label Yes")
+
+    return JudgeDecision(
+        label=label,
+        reason=reason,
+        question_type=question_type,
+        direct_target_guess=direct_target_guess,
+    )
 
 
 def _classify_error_message(error_message: str) -> str:
@@ -363,15 +406,6 @@ def _classify_error_message(error_message: str) -> str:
         if marker in normalized:
             return "transient_error"
     return "runtime_error"
-
-
-def _is_identity_question(question: str, target: dict[str, Any]) -> bool:
-    normalized_question = f" {_normalize_text(question)} "
-    for candidate in [target["name"], *target.get("aliases", [])]:
-        normalized_candidate = _normalize_text(candidate)
-        if normalized_candidate and f" {normalized_candidate} " in normalized_question:
-            return True
-    return False
 
 
 def _write_episode_markdown(logger: RunLogger, episode: dict[str, Any]) -> None:
@@ -638,7 +672,7 @@ def run_full_game_episode(
                 user_prompt=judge_user_prompt,
                 reasoning=config.judge_reasoning,
             )
-            judge_decision = _parse_judge_response(judge_raw_output)
+            judge_decision = _parse_judge_response(judge_raw_output, require_structured=True)
             judgment = judge_decision.label
             logger.log_event(
                 {
@@ -656,11 +690,12 @@ def run_full_game_episode(
                     "raw_output": judge_raw_output,
                     "normalized_output": judgment,
                     "judge_reason": judge_decision.reason,
+                    "judge_question_type": judge_decision.question_type,
+                    "judge_direct_target_guess": judge_decision.direct_target_guess,
                     "generation_config": _reasoning_to_payload(config.judge_reasoning),
                 }
             )
 
-            is_identity_question = _is_identity_question(guesser_raw_output, target)
             turns.append(
                 {
                     "turn": turn_number,
@@ -675,17 +710,18 @@ def run_full_game_episode(
                     "judge_latency_ms": judge_latency_ms,
                     "guesser_raw_output": guesser_raw_output,
                     "judge_raw_output": judge_raw_output,
+                    "judge_question_type": judge_decision.question_type,
+                    "judge_direct_target_guess": judge_decision.direct_target_guess,
                     "guesser_session_mode": guesser_session.session_mode,
                     "judge_session_mode": judge_session_mode,
                     "guesser_request_id": guesser_request_id,
                     "guesser_previous_request_id": guesser_previous_request_id,
                     **guesser_call_metadata,
-                    "is_identity_question": is_identity_question,
                 }
             )
             outcome["turns_used"] = turn_number
             outcome["final_question"] = guesser_raw_output
-            outcome["final_question_correct"] = bool(is_identity_question and judgment == JUDGMENT_TRUE)
+            outcome["final_question_correct"] = bool(judge_decision.direct_target_guess)
             if progress_callback is not None:
                 progress_callback(
                     {

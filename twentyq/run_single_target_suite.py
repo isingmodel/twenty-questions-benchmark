@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median
 from typing import Any
+from uuid import uuid4
 
 from .data import load_targets
 from .env import load_dotenv
@@ -73,7 +74,8 @@ def _sanitize_fragment(value: str) -> str:
 def _default_suite_dir(config: SingleTargetSuiteConfig) -> Path:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     suite_slug = _sanitize_fragment(config.suite_name)
-    return DEFAULT_OUTPUT_PARENT / f"{stamp}__{suite_slug}__budget{config.budget}"
+    unique_suffix = uuid4().hex[:8]
+    return DEFAULT_OUTPUT_PARENT / f"{stamp}__{suite_slug}__budget{config.budget}__{unique_suffix}"
 
 
 def _require_string(value: Any, field_name: str) -> str:

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
+import tempfile
+from pathlib import Path
 
 from twentyq.episode_runner import (
     ANTHROPIC_PROVIDER,
@@ -10,16 +13,19 @@ from twentyq.episode_runner import (
     JudgeDecision,
     OPENAI_PROVIDER,
     PROVIDER,
+    FullGameConfig,
     ReasoningConfig,
+    QUESTION_TYPE_IDENTITY,
+    QUESTION_TYPE_NON_IDENTITY,
     _build_judge_user_prompt,
     _parse_judge_response,
     _reasoning_to_payload,
-    _is_identity_question,
     _normalize_judge_output,
     _validate_reasoning_config,
     provider_for_model,
     _validate_budget,
     resolve_reasoning_effort,
+    run_full_game_episode,
 )
 
 
@@ -35,24 +41,50 @@ class FullGameHelpersTests(unittest.TestCase):
             _normalize_judge_output("maybe")
 
     def test_parse_judge_response_accepts_json_with_reason(self) -> None:
-        decision = _parse_judge_response('{"label":"Ambiguous","reason":"The target record does not specify EU membership."}')
+        decision = _parse_judge_response(
+            '{"label":"Ambiguous","reason":"The target record does not specify EU membership.","question_type":"non_identity","direct_target_guess":false}'
+        )
         self.assertEqual(
             decision,
-            JudgeDecision(label=JUDGMENT_AMBIGUOUS, reason="The target record does not specify EU membership."),
+            JudgeDecision(
+                label=JUDGMENT_AMBIGUOUS,
+                reason="The target record does not specify EU membership.",
+                question_type=QUESTION_TYPE_NON_IDENTITY,
+                direct_target_guess=False,
+            ),
         )
 
     def test_parse_judge_response_accepts_legacy_label_only_output(self) -> None:
         decision = _parse_judge_response("Yes")
-        self.assertEqual(decision, JudgeDecision(label=JUDGMENT_TRUE, reason=None))
+        self.assertEqual(
+            decision,
+            JudgeDecision(label=JUDGMENT_TRUE, reason=None, question_type=None, direct_target_guess=None),
+        )
 
     def test_parse_judge_response_extracts_json_from_fenced_output(self) -> None:
         decision = _parse_judge_response(
-            '```json\n{"label":"No","reason":"The target record says the city is in Europe, not Asia."}\n```'
+            '```json\n{"label":"No","reason":"The target record says the city is in Europe, not Asia.","question_type":"identity","direct_target_guess":false}\n```'
         )
         self.assertEqual(
             decision,
-            JudgeDecision(label=JUDGMENT_FALSE, reason="The target record says the city is in Europe, not Asia."),
+            JudgeDecision(
+                label=JUDGMENT_FALSE,
+                reason="The target record says the city is in Europe, not Asia.",
+                question_type=QUESTION_TYPE_IDENTITY,
+                direct_target_guess=False,
+            ),
         )
+
+    def test_parse_judge_response_requires_structured_fields_when_requested(self) -> None:
+        with self.assertRaisesRegex(ValueError, "missing question_type"):
+            _parse_judge_response('{"label":"Yes","reason":"Correct."}', require_structured=True)
+
+    def test_parse_judge_response_rejects_inconsistent_solved_flag(self) -> None:
+        with self.assertRaisesRegex(ValueError, "direct target guess as solved without label Yes"):
+            _parse_judge_response(
+                '{"label":"No","reason":"Wrong candidate.","question_type":"identity","direct_target_guess":true}',
+                require_structured=True,
+            )
 
     def test_build_judge_user_prompt_uses_only_current_question(self) -> None:
         prompt = _build_judge_user_prompt(
@@ -64,15 +96,6 @@ class FullGameHelpersTests(unittest.TestCase):
         self.assertIn("Is it in Europe?", prompt)
         self.assertNotIn("Transcript", prompt)
         self.assertNotIn("Judge:", prompt)
-
-    def test_identity_question_matches_aliases(self) -> None:
-        target = {"name": "Marie Curie", "aliases": ["curie", "marie curie"]}
-        self.assertTrue(_is_identity_question("Is it Curie?", target))
-        self.assertFalse(_is_identity_question("Is it a scientist?", target))
-
-    def test_identity_question_accepts_minor_normalization_for_aliases(self) -> None:
-        target = {"name": "Abraham Lincoln", "aliases": ["lincoln"]}
-        self.assertTrue(_is_identity_question("Is it LINCOLN?!", target))
 
     def test_provider_for_model_detects_gemini_openai_and_anthropic(self) -> None:
         self.assertEqual(provider_for_model("gemini-3-flash-preview"), PROVIDER)
@@ -177,3 +200,84 @@ class FullGameHelpersTests(unittest.TestCase):
     def test_validate_budget_rejects_non_positive_values(self) -> None:
         with self.assertRaisesRegex(ValueError, "Budget must be positive"):
             _validate_budget(0)
+
+    def test_run_full_game_does_not_solve_categorical_question_that_mentions_target(self) -> None:
+        question = (
+            "Is the hidden target one of South Korea's metropolitan cities with a population over 1 million "
+            "(such as Busan, Incheon, Daegu, Daejeon, Gwangju, or Ulsan)?"
+        )
+        judge_output = (
+            '{"label":"Yes","reason":"Busan is in that set.","question_type":"non_identity","direct_target_guess":false}'
+        )
+
+        class FakeGuesserSession:
+            session_mode = "fake-guesser"
+
+        def fake_call_model(_client: object, method_name: str, **kwargs: object) -> tuple[object, int]:
+            self.assertEqual(method_name, "generate_turn")
+            return ((question, "turn prompt", "req-1", None), 7)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with (
+                patch("twentyq.episode_runner._create_client_for_model", return_value=object()),
+                patch("twentyq.episode_runner._create_guesser_session", return_value=FakeGuesserSession()),
+                patch("twentyq.episode_runner._call_model", side_effect=fake_call_model),
+                patch("twentyq.episode_runner._call_stateless_model", return_value=(judge_output, 5)),
+            ):
+                exit_code, summary = run_full_game_episode(
+                    config=FullGameConfig(
+                        target_id="place_busan",
+                        budget=1,
+                        guesser_model="gpt-5.4",
+                        judge_model="gpt-5.4-mini",
+                        guesser_reasoning=ReasoningConfig(),
+                        judge_reasoning=ReasoningConfig(),
+                        run_dir=None,
+                    ),
+                    target={"id": "place_busan", "name": "Busan", "domain": "places", "aliases": []},
+                    runs_dir=Path(tmpdir),
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertFalse(summary["solved"])
+        self.assertFalse(summary["final_question_correct"])
+        self.assertEqual(summary["final_question"], question)
+
+    def test_run_full_game_solves_only_when_judge_marks_direct_target_guess(self) -> None:
+        question = "Is the hidden target Busan?"
+        judge_output = (
+            '{"label":"Yes","reason":"The question directly names the target.","question_type":"identity","direct_target_guess":true}'
+        )
+
+        class FakeGuesserSession:
+            session_mode = "fake-guesser"
+
+        def fake_call_model(_client: object, method_name: str, **kwargs: object) -> tuple[object, int]:
+            self.assertEqual(method_name, "generate_turn")
+            return ((question, "turn prompt", "req-1", None), 7)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with (
+                patch("twentyq.episode_runner._create_client_for_model", return_value=object()),
+                patch("twentyq.episode_runner._create_guesser_session", return_value=FakeGuesserSession()),
+                patch("twentyq.episode_runner._call_model", side_effect=fake_call_model),
+                patch("twentyq.episode_runner._call_stateless_model", return_value=(judge_output, 5)),
+            ):
+                exit_code, summary = run_full_game_episode(
+                    config=FullGameConfig(
+                        target_id="place_busan",
+                        budget=1,
+                        guesser_model="gpt-5.4",
+                        judge_model="gpt-5.4-mini",
+                        guesser_reasoning=ReasoningConfig(),
+                        judge_reasoning=ReasoningConfig(),
+                        run_dir=None,
+                    ),
+                    target={"id": "place_busan", "name": "Busan", "domain": "places", "aliases": []},
+                    runs_dir=Path(tmpdir),
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(summary["solved"])
+        self.assertTrue(summary["final_question_correct"])
+        self.assertEqual(summary["final_question"], question)

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from .data import load_data
 from .env import load_dotenv
@@ -47,7 +48,13 @@ def _default_benchmark_dir(config: BenchmarkConfig) -> Path:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     slug = config.guesser_model.replace("/", "-")
     guesser_provider = provider_for_model(config.guesser_model)
-    return ROOT / "reports" / f"{guesser_provider}-benchmark" / f"{stamp}__{guesser_provider}__budget{config.budget}__{slug}"
+    unique_suffix = uuid4().hex[:8]
+    return (
+        ROOT
+        / "reports"
+        / f"{guesser_provider}-benchmark"
+        / f"{stamp}__{guesser_provider}__budget{config.budget}__{slug}__{unique_suffix}"
+    )
 
 
 def parse_args() -> BenchmarkConfig:

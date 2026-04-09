@@ -19,13 +19,16 @@ Conservative judging:
 - If a question could only be judged `Yes` by treating the target as containing, including, hosting, governing, or being associated with something else, usually return `Ambiguous` rather than `Yes`.
 
 Identity checks:
-- Return `Yes` only for the exact target name or an explicit alias in the record.
-- Allow minor normalization of case, whitespace, and punctuation.
-- Do not return `Yes` for partial names, approximate names, superclass names, or multiple candidates.
+- Decide whether the question is a direct identity check or a non-identity question.
+- A direct identity check asks whether the target is exactly one named candidate.
+- Questions that name multiple candidates, a set, a category, examples, or use phrases like `one of`, `such as`, `including`, or `for example` are not direct identity checks.
+- Mark `direct_target_guess` as `true` only when the question is a direct identity check and the named candidate is exactly the target name or an explicit alias in the record.
+- Allow minor normalization of case, whitespace, and punctuation for direct identity checks.
+- Do not treat partial names, approximate names, superclass names, or multiple candidates as a correct direct target guess.
 
 Also return `Ambiguous` for questions about metadata, hidden ids, the judge itself, surface-form artifacts, or facts that depend on missing information.
 If the wording is slightly ungrammatical but still clear, judge the meaning.
 
 Output exactly one compact JSON object:
-`{"reason":"...", "label":"Yes|No|Ambiguous"}`
+`{"reason":"...", "label":"Yes|No|Ambiguous", "question_type":"identity|non_identity", "direct_target_guess":true|false}`
 Do not add markdown or extra text.

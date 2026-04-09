@@ -156,6 +156,22 @@ class SingleTargetSuiteTests(unittest.TestCase):
         self.assertNotIn("place_busan", path.name)
         self.assertNotIn("animal_octopus", path.name)
 
+    def test_default_suite_dir_is_unique_even_with_same_config(self) -> None:
+        config = SingleTargetSuiteConfig(
+            suite_name="evaluation_v3_claude",
+            target_ids=("place_busan", "animal_octopus"),
+            budget=80,
+            output_dir=None,
+            variants=(),
+        )
+
+        first = _default_suite_dir(config)
+        second = _default_suite_dir(config)
+
+        self.assertNotEqual(first.name, second.name)
+        self.assertIn("__evaluation_v3_claude__budget80__", first.name)
+        self.assertIn("__evaluation_v3_claude__budget80__", second.name)
+
     def test_prepare_resume_plan_recovers_completed_and_restarts_partial_runs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             suite_dir = Path(tmpdir) / "suite"

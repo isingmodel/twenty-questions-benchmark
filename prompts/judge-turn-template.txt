@@ -6,4 +6,6 @@ Current question:
 Return exactly one JSON object with:
 - `reason`: a short grounded explanation
 - `label`: `Yes`, `No`, or `Ambiguous`
+- `question_type`: `identity` or `non_identity`
+- `direct_target_guess`: `true` only when this question directly and correctly identifies the exact target or an explicit alias; otherwise `false`
 
