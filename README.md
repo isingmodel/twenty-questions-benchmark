@@ -47,8 +47,9 @@ The primary checked-in snapshot now reports **Solve@20**, **Solve@40**, and **So
 | 5 | Gemini 3 Flash | 55.71% | 80.00% | 86.43% | 140 |
 | 6 | Claude Sonnet 4.5 (budget 2048) | 54.29% | 80.71% | 88.57% | 140 |
 | 7 | GPT-4o | 52.14% | 75.00% | 81.43% | 140 |
-| 8 | Gemini 3.1 Flash Lite | 45.71% | 80.00% | 92.14% | 140 |
-| 9 | GPT-5.4 Mini (low) | 41.43% | 73.57% | 90.00% | 140 |
+| 8 | GPT-5.4 Mini (low, strategic) | 52.86% | 71.43% | 91.43% | 70 |
+| 9 | Gemini 3.1 Flash Lite | 45.71% | 80.00% | 92.14% | 140 |
+| 10 | GPT-5.4 Mini (low) | 41.43% | 73.57% | 90.00% | 140 |
 
 **Snapshot takeaways:**
 
