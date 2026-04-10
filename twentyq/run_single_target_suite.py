@@ -22,7 +22,7 @@ from .episode_runner import (
     resolve_reasoning_effort,
     run_full_game_episode,
 )
-from .prompts import ROOT
+from .prompts import DEFAULT_GUESSER_PROMPT_SET, ROOT, load_guesser_prompts
 
 
 DEFAULT_OUTPUT_PARENT = ROOT / "reports" / "single-target-suite"
@@ -32,6 +32,9 @@ DEFAULT_OUTPUT_PARENT = ROOT / "reports" / "single-target-suite"
 class ModelVariant:
     label: str
     guesser_model: str
+    guesser_prompt_set: str
+    guesser_initial_prompt_path: Path | None
+    guesser_turn_prompt_path: Path | None
     guesser_reasoning_effort: str | None
     judge_model: str
     judge_reasoning_effort: str | None
@@ -99,13 +102,41 @@ def _require_positive_int(value: Any, field_name: str) -> int:
     return value
 
 
+def _optional_path(value: Any, field_name: str, base_dir: Path) -> Path | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Expected non-empty string field {field_name!r}")
+    return (base_dir / value).resolve()
+
+
 def load_suite_config(config_path: Path) -> SingleTargetSuiteConfig:
     raw = json.loads(config_path.read_text(encoding="utf-8"))
+    config_dir = config_path.parent
     suite_name = _require_string(raw.get("suite_name"), "suite_name")
     target_ids = _require_string_list(raw.get("targets"), "targets")
     budget = _validate_budget(_require_positive_int(raw.get("budget"), "budget"))
     default_repetitions = _require_positive_int(raw.get("repetitions"), "repetitions")
     default_judge_model = _require_string(raw.get("judge_model"), "judge_model")
+    default_guesser_prompt_set = _require_string(
+        raw.get("guesser_prompt_set", DEFAULT_GUESSER_PROMPT_SET),
+        "guesser_prompt_set",
+    )
+    default_guesser_initial_prompt_path = _optional_path(
+        raw.get("guesser_initial_prompt_path"),
+        "guesser_initial_prompt_path",
+        config_dir,
+    )
+    default_guesser_turn_prompt_path = _optional_path(
+        raw.get("guesser_turn_prompt_path"),
+        "guesser_turn_prompt_path",
+        config_dir,
+    )
+    load_guesser_prompts(
+        prompt_set=default_guesser_prompt_set,
+        initial_prompt_path=default_guesser_initial_prompt_path,
+        turn_prompt_path=default_guesser_turn_prompt_path,
+    )
     default_guesser_effort = raw.get("guesser_reasoning_effort")
     default_judge_effort = raw.get("judge_reasoning_effort")
     if default_guesser_effort is not None:
@@ -123,12 +154,31 @@ def load_suite_config(config_path: Path) -> SingleTargetSuiteConfig:
             raise ValueError(f"Expected object for variants[{index - 1}]")
         label = _require_string(raw_variant.get("label"), f"variants[{index - 1}].label")
         guesser_model = _require_string(raw_variant.get("guesser_model"), f"variants[{index - 1}].guesser_model")
+        guesser_prompt_set = _require_string(
+            raw_variant.get("guesser_prompt_set", default_guesser_prompt_set),
+            f"variants[{index - 1}].guesser_prompt_set",
+        )
+        guesser_initial_prompt_path = _optional_path(
+            raw_variant.get("guesser_initial_prompt_path", str(default_guesser_initial_prompt_path) if default_guesser_initial_prompt_path else None),
+            f"variants[{index - 1}].guesser_initial_prompt_path",
+            config_dir,
+        )
+        guesser_turn_prompt_path = _optional_path(
+            raw_variant.get("guesser_turn_prompt_path", str(default_guesser_turn_prompt_path) if default_guesser_turn_prompt_path else None),
+            f"variants[{index - 1}].guesser_turn_prompt_path",
+            config_dir,
+        )
         judge_model = raw_variant.get("judge_model", default_judge_model)
         guesser_effort = raw_variant.get("guesser_reasoning_effort", default_guesser_effort)
         judge_effort = raw_variant.get("judge_reasoning_effort", default_judge_effort)
         repetitions = raw_variant.get("repetitions", default_repetitions)
         if judge_model is None:
             raise ValueError(f"Missing judge_model for variants[{index - 1}]")
+        load_guesser_prompts(
+            prompt_set=guesser_prompt_set,
+            initial_prompt_path=guesser_initial_prompt_path,
+            turn_prompt_path=guesser_turn_prompt_path,
+        )
         if guesser_effort is not None:
             guesser_effort = _require_string(guesser_effort, f"variants[{index - 1}].guesser_reasoning_effort")
         if judge_effort is not None:
@@ -137,12 +187,19 @@ def load_suite_config(config_path: Path) -> SingleTargetSuiteConfig:
             ModelVariant(
                 label=label,
                 guesser_model=guesser_model,
+                guesser_prompt_set=guesser_prompt_set,
+                guesser_initial_prompt_path=guesser_initial_prompt_path,
+                guesser_turn_prompt_path=guesser_turn_prompt_path,
                 guesser_reasoning_effort=guesser_effort,
                 judge_model=_require_string(judge_model, f"variants[{index - 1}].judge_model"),
                 judge_reasoning_effort=judge_effort,
                 repetitions=_require_positive_int(repetitions, f"variants[{index - 1}].repetitions"),
             )
         )
+
+    variant_labels = [variant.label for variant in variants]
+    if len(set(variant_labels)) != len(variant_labels):
+        raise ValueError("Variant labels must be unique within a suite config")
 
     output_dir = raw.get("output_dir")
     resolved_output_dir = Path(output_dir) if isinstance(output_dir, str) and output_dir.strip() else None
@@ -182,6 +239,7 @@ def _build_manifest(config: SingleTargetSuiteConfig, max_parallel: int) -> dict[
             {
                 "label": variant.label,
                 "guesser_model": variant.guesser_model,
+                **_resolved_guesser_prompt_metadata(variant),
                 "guesser_reasoning_effort": variant.guesser_reasoning_effort,
                 "judge_model": variant.judge_model,
                 "judge_reasoning_effort": variant.judge_reasoning_effort,
@@ -229,6 +287,32 @@ def _job_index_by_key(jobs: list[dict[str, Any]]) -> dict[tuple[str, str, int], 
     return index_by_key
 
 
+def _resolved_guesser_prompt_metadata_from_fields(
+    *,
+    guesser_prompt_set: str,
+    guesser_initial_prompt_path: Path | None,
+    guesser_turn_prompt_path: Path | None,
+) -> dict[str, str]:
+    loaded = load_guesser_prompts(
+        prompt_set=guesser_prompt_set,
+        initial_prompt_path=guesser_initial_prompt_path,
+        turn_prompt_path=guesser_turn_prompt_path,
+    )
+    return {
+        "guesser_prompt_set": loaded.name,
+        "guesser_initial_prompt_path": loaded.initial_prompt_path,
+        "guesser_turn_prompt_path": loaded.turn_prompt_path,
+    }
+
+
+def _resolved_guesser_prompt_metadata(variant: ModelVariant) -> dict[str, str]:
+    return _resolved_guesser_prompt_metadata_from_fields(
+        guesser_prompt_set=variant.guesser_prompt_set,
+        guesser_initial_prompt_path=variant.guesser_initial_prompt_path,
+        guesser_turn_prompt_path=variant.guesser_turn_prompt_path,
+    )
+
+
 def _refresh_status_counters(status: dict[str, Any], pending_results: dict[int, dict[str, Any]]) -> None:
     status["runs_completed"] = len(pending_results)
     status["runs_failed"] = sum(
@@ -256,6 +340,7 @@ def _reset_running_status(
     status["current_target_id"] = None
     status["current_variant_label"] = None
     status["current_guesser_model"] = None
+    status["current_guesser_prompt_set"] = None
     status["current_judge_model"] = None
     status["current_repetition"] = None
     status["active_runs"] = []
@@ -279,8 +364,27 @@ def _parse_run_index(run_id: str) -> int:
 
 
 def _variant_matches_run_config(variant: ModelVariant, run_config: dict[str, Any]) -> bool:
+    prompt_metadata = _resolved_guesser_prompt_metadata(variant)
+    run_config_prompt_metadata = _resolved_guesser_prompt_metadata_from_fields(
+        guesser_prompt_set=str(run_config.get("guesser_prompt_set", DEFAULT_GUESSER_PROMPT_SET)),
+        guesser_initial_prompt_path=(
+            Path(run_config["guesser_initial_prompt_path"])
+            if isinstance(run_config.get("guesser_initial_prompt_path"), str)
+            and run_config.get("guesser_initial_prompt_path")
+            else None
+        ),
+        guesser_turn_prompt_path=(
+            Path(run_config["guesser_turn_prompt_path"])
+            if isinstance(run_config.get("guesser_turn_prompt_path"), str)
+            and run_config.get("guesser_turn_prompt_path")
+            else None
+        ),
+    )
     return (
         variant.guesser_model == run_config.get("guesser_model")
+        and prompt_metadata["guesser_prompt_set"] == run_config_prompt_metadata["guesser_prompt_set"]
+        and prompt_metadata["guesser_initial_prompt_path"] == run_config_prompt_metadata["guesser_initial_prompt_path"]
+        and prompt_metadata["guesser_turn_prompt_path"] == run_config_prompt_metadata["guesser_turn_prompt_path"]
         and variant.judge_model == run_config.get("judge_model")
         and _reasoning_to_payload(resolve_reasoning_effort(variant.guesser_model, variant.guesser_reasoning_effort, role="Guesser"))
         == run_config.get("guesser_reasoning", {})
@@ -340,6 +444,7 @@ def _validate_resume_manifest(config: SingleTargetSuiteConfig, manifest_path: Pa
         {
             "label": variant.label,
             "guesser_model": variant.guesser_model,
+            **_resolved_guesser_prompt_metadata(variant),
             "guesser_reasoning_effort": variant.guesser_reasoning_effort,
             "judge_model": variant.judge_model,
             "judge_reasoning_effort": variant.judge_reasoning_effort,
@@ -351,6 +456,21 @@ def _validate_resume_manifest(config: SingleTargetSuiteConfig, manifest_path: Pa
         {
             "label": raw_variant.get("label"),
             "guesser_model": raw_variant.get("guesser_model"),
+            **_resolved_guesser_prompt_metadata_from_fields(
+                guesser_prompt_set=str(raw_variant.get("guesser_prompt_set", DEFAULT_GUESSER_PROMPT_SET)),
+                guesser_initial_prompt_path=(
+                    Path(raw_variant["guesser_initial_prompt_path"])
+                    if isinstance(raw_variant.get("guesser_initial_prompt_path"), str)
+                    and raw_variant.get("guesser_initial_prompt_path")
+                    else None
+                ),
+                guesser_turn_prompt_path=(
+                    Path(raw_variant["guesser_turn_prompt_path"])
+                    if isinstance(raw_variant.get("guesser_turn_prompt_path"), str)
+                    and raw_variant.get("guesser_turn_prompt_path")
+                    else None
+                ),
+            ),
             "guesser_reasoning_effort": raw_variant.get("guesser_reasoning_effort"),
             "judge_model": raw_variant.get("judge_model"),
             "judge_reasoning_effort": raw_variant.get("judge_reasoning_effort"),
@@ -501,6 +621,7 @@ def _initial_status(config: SingleTargetSuiteConfig, suite_dir: Path) -> dict[st
         "current_target_id": None,
         "current_variant_label": None,
         "current_guesser_model": None,
+        "current_guesser_prompt_set": None,
         "current_judge_model": None,
         "current_repetition": None,
         "active_runs": [],
@@ -524,6 +645,7 @@ def _result_record(
         "variant_label": variant.label,
         "repetition_index": repetition_index,
         "guesser_model": variant.guesser_model,
+        "guesser_prompt_set": variant.guesser_prompt_set,
         "judge_model": variant.judge_model,
         "guesser_reasoning_effort": variant.guesser_reasoning_effort,
         "judge_reasoning_effort": variant.judge_reasoning_effort,
@@ -553,6 +675,7 @@ def aggregate_results(config: SingleTargetSuiteConfig, results: list[dict[str, A
                 "target_id": target_id,
                 "variant_label": variant_label,
                 "guesser_model": exemplar["guesser_model"],
+                "guesser_prompt_set": exemplar.get("guesser_prompt_set", DEFAULT_GUESSER_PROMPT_SET),
                 "judge_model": exemplar["judge_model"],
                 "guesser_reasoning_effort": exemplar.get("guesser_reasoning_effort"),
                 "judge_reasoning_effort": exemplar.get("judge_reasoning_effort"),
@@ -602,17 +725,18 @@ def render_report(config: SingleTargetSuiteConfig, aggregate: dict[str, Any]) ->
         "",
         "## Per Variant",
         "",
-        "| target_id | variant | guesser_model | judge_model | runs | solved | solve_rate | avg_turns | median_turns | avg_turns_solved | failures |",
-        "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| target_id | variant | guesser_model | guesser_prompt_set | judge_model | runs | solved | solve_rate | avg_turns | median_turns | avg_turns_solved | failures |",
+        "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for group in aggregate["groups"]:
         avg_turns_solved = group["avg_turns_solved"]
         avg_turns_solved_text = "-" if avg_turns_solved is None else f"{avg_turns_solved:.2f}"
         lines.append(
-            "| {target_id} | {variant_label} | {guesser_model} | {judge_model} | {runs_total} | {runs_solved} | {solve_rate:.2%} | {avg_turns_used:.2f} | {median_turns_used:.2f} | {avg_turns_solved} | {runs_failed} |".format(
+            "| {target_id} | {variant_label} | {guesser_model} | {guesser_prompt_set} | {judge_model} | {runs_total} | {runs_solved} | {solve_rate:.2%} | {avg_turns_used:.2f} | {median_turns_used:.2f} | {avg_turns_solved} | {runs_failed} |".format(
                 target_id=group["target_id"],
                 variant_label=group["variant_label"],
                 guesser_model=group["guesser_model"],
+                guesser_prompt_set=group["guesser_prompt_set"],
                 judge_model=group["judge_model"],
                 runs_total=group["runs_total"],
                 runs_solved=group["runs_solved"],
@@ -627,8 +751,9 @@ def render_report(config: SingleTargetSuiteConfig, aggregate: dict[str, Any]) ->
     lines.extend(["", "## Notes", ""])
     for group in aggregate["groups"]:
         lines.append(
-            "- `{label}` resolved to guesser reasoning `{gr}` and judge reasoning `{jr}`.".format(
+            "- `{label}` used guesser prompt set `{prompt_set}`, guesser reasoning `{gr}`, and judge reasoning `{jr}`.".format(
                 label=group["variant_label"],
+                prompt_set=group["guesser_prompt_set"],
                 gr=json.dumps(group["guesser_reasoning"], ensure_ascii=True, sort_keys=True),
                 jr=json.dumps(group["judge_reasoning"], ensure_ascii=True, sort_keys=True),
             )
@@ -677,6 +802,9 @@ def _run_suite_job(
             guesser_reasoning=guesser_reasoning,
             judge_reasoning=judge_reasoning,
             run_dir=runs_dir,
+            guesser_prompt_set=variant.guesser_prompt_set,
+            guesser_initial_prompt_path=variant.guesser_initial_prompt_path,
+            guesser_turn_prompt_path=variant.guesser_turn_prompt_path,
         ),
         target=target,
         runs_dir=runs_dir,
@@ -748,6 +876,7 @@ def main() -> int:
                 status["current_target_id"] = job["target_id"]
                 status["current_variant_label"] = job["variant"].label
                 status["current_guesser_model"] = job["variant"].guesser_model
+                status["current_guesser_prompt_set"] = job["variant"].guesser_prompt_set
                 status["current_judge_model"] = job["variant"].judge_model
                 status["current_repetition"] = job["repetition_index"]
                 status["active_runs"] = [
@@ -756,6 +885,7 @@ def main() -> int:
                         "target_id": job["target_id"],
                         "variant_label": job["variant"].label,
                         "guesser_model": job["variant"].guesser_model,
+                        "guesser_prompt_set": job["variant"].guesser_prompt_set,
                         "judge_model": job["variant"].judge_model,
                         "repetition_index": job["repetition_index"],
                     },
@@ -809,6 +939,7 @@ def main() -> int:
     status["current_target_id"] = None
     status["current_variant_label"] = None
     status["current_guesser_model"] = None
+    status["current_guesser_prompt_set"] = None
     status["current_judge_model"] = None
     status["current_repetition"] = None
     status["active_runs"] = []

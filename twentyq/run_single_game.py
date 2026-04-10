@@ -17,7 +17,7 @@ from .episode_runner import (
     _validate_reasoning_config,
     run_full_game_episode,
 )
-from .prompts import ROOT
+from .prompts import DEFAULT_GUESSER_PROMPT_SET, ROOT
 
 
 def parse_args() -> FullGameConfig:
@@ -26,6 +26,23 @@ def parse_args() -> FullGameConfig:
     parser.add_argument("--budget", type=int, default=DEFAULT_BUDGET, help="Maximum number of turns before stopping.")
     parser.add_argument("--guesser-model", default=DEFAULT_GUESSER_MODEL, help="Model id for the guesser.")
     parser.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL, help="Model id for the judge.")
+    parser.add_argument(
+        "--guesser-prompt-set",
+        default=DEFAULT_GUESSER_PROMPT_SET,
+        help="Built-in guesser prompt set name, or a custom label when using prompt-path overrides.",
+    )
+    parser.add_argument(
+        "--guesser-initial-prompt-path",
+        type=Path,
+        default=None,
+        help="Optional path to a custom initial guesser prompt.",
+    )
+    parser.add_argument(
+        "--guesser-turn-prompt-path",
+        type=Path,
+        default=None,
+        help="Optional path to a custom per-turn guesser prompt.",
+    )
     parser.add_argument(
         "--guesser-thinking-level",
         choices=THINKING_LEVEL_CHOICES,
@@ -70,6 +87,9 @@ def parse_args() -> FullGameConfig:
             thinking_budget=args.judge_thinking_budget,
         ),
         run_dir=args.run_dir,
+        guesser_prompt_set=args.guesser_prompt_set,
+        guesser_initial_prompt_path=args.guesser_initial_prompt_path,
+        guesser_turn_prompt_path=args.guesser_turn_prompt_path,
     )
 
 

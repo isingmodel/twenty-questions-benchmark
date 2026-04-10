@@ -52,12 +52,8 @@ The primary checked-in snapshot now reports **Solve@20**, **Solve@40**, and **So
 
 **Snapshot takeaways:**
 
-- **Claude Opus 4.6** is the clearest all-around leader across the three cutoffs, with the strongest early conversion rate at 20 turns and the strongest overall completion rate by 60 turns.
-- **GPT-5 and GPT-5.4 stay close to the top, but with different shapes.** GPT-5 (`low`) is stronger at 20 and 40 turns, while GPT-5.4 (`low`) catches up by 60 turns.
-- **Reasoning effort matters for GPT-5.4 Mini.** The `high` setting improves Solve@20 by 3.6 points, Solve@40 by 15.0 points, and Solve@60 by 7.1 points over the `low` setting.
-- **Gemini 3 Flash and GPT-4o look better on short-horizon speed than on longer-horizon completion.** Both are competitive at 20 turns, but by 60 turns they sit clearly below the leading group.
-- **Gemini 3.1 Flash Lite is the opposite profile.** Its Solve@20 is modest, but it recovers much more strongly by 60 turns, suggesting slower but steadier convergence.
-- All models were judged by the same judge configuration, so the differences shown here are best read as guesser-side behavior under a fixed protocol rather than judge variance.
+- **GPT-5.4 Mini low vs high:** `high` improves Solve@20 from 41.43% to 45.00%, Solve@40 from 73.57% to 88.57%, and Solve@60 from 90.00% to 97.14%. It also improves overall solve rate from 93.57% to 98.57% and lowers average turns per solved game from 28.24 to 24.09.
+- **GPT-5.4 Mini low vs low+strategic prompt:** `gpt-5.4-mini_low_strategic` improves Solve@20 from 41.43% to 52.86%, Solve@60 from 90.00% to 91.43%, and lowers average turns per solved game from 28.24 to 26.14. Solve@40 is slightly worse at 71.43% versus 73.57%, so the current strategic prompt looks more like an early-game improvement than a uniform gain. This strategic sample currently covers 70 runs, versus 140 for the default low setting.
 
 The checked-in cutoff plot below is generated from `results/results.csv`.
 
@@ -115,6 +111,7 @@ CLAUDE_API_KEY=...      # or ANTHROPIC_API_KEY / anthropic_key
 python3 -m twentyq.run_single_game \
   --target-id place_paris \
   --budget 40 \
+  --guesser-prompt-set strategic \
   --guesser-model gpt-5.4 \
   --judge-model gemini-3-flash-preview
 ```
@@ -129,6 +126,23 @@ python3 -m twentyq.run_single_target_suite \
 ```
 
 This writes a timestamped suite directory under `reports/single-target-suite/`.
+
+### Run a Prompt Ablation
+
+The guesser scaffold is now replaceable. `default` preserves the original minimal prompt. `strategic` adds a more explicit high-information / early-guess policy.
+
+For a ready-made strategic-prompt suite, use:
+
+```bash
+python3 -m twentyq.run_single_target_suite \
+  --config configs/single_target_suites/prompt_ablation_gpt54.json
+```
+
+You can also define your own pair of prompt files with:
+
+- `guesser_prompt_set`
+- `guesser_initial_prompt_path`
+- `guesser_turn_prompt_path`
 
 ### Run Cross-Suite Analysis
 
@@ -192,7 +206,9 @@ Cross-suite analysis writes `aggregate.json` and `report.md` under `reports/sing
 This repository is best used as a controlled interactive benchmark:
 
 - the prompt scaffold is fixed and intentional
+- the checked-in benchmark results use the default guesser prompt set
 - results depend on the chosen judge model and judge prompt
+- results also depend on the chosen guesser prompt set
 - the target set is explicit and relatively small
 - provider-native multi-turn API behavior is part of what gets measured
 

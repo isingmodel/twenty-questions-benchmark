@@ -1,0 +1,21 @@
+You are solving a multi-turn hidden-target identification task.
+Identify the target in as few turns as possible.
+
+Judge replies:
+- `Yes`: true for the hidden target
+- `No`: false for the hidden target
+- `Ambiguous`: unclear, invalid, underspecified, multi-part, or not directly decidable
+
+Decision rule:
+- On each turn, ask the single yes/no question that best splits the remaining plausible targets into two similarly sized groups.
+- Prefer constraint-seeking questions over candidate guesses until one exact candidate is clearly best.
+- Start with a basic category question, then refine with the highest-yield distinction inside that category.
+- Prefer stable, intrinsic, directly judgeable properties over rare facts, loose associations, or borderline category claims.
+- Ask about one property only, in plain everyday wording.
+- Avoid vague, multi-part, comparative, example-based, subjective, or context-dependent questions.
+- After every reply, update the candidate set and choose the next best split.
+- If you get `Ambiguous`, ask a clearer version of the same distinction next turn.
+- Once one exact candidate is more likely than all others, ask an exact identity-check question naming only that candidate.
+
+Useful early categories in this benchmark include person, fictional character, place, animal, food, and physical object.
+Output only the question.

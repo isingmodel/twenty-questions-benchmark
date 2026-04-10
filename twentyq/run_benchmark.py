@@ -20,7 +20,7 @@ from .episode_runner import (
     provider_for_model,
     run_full_game_episode,
 )
-from .prompts import ROOT
+from .prompts import DEFAULT_GUESSER_PROMPT_SET, ROOT
 
 
 
@@ -33,6 +33,9 @@ class BenchmarkConfig:
     budget: int
     guesser_model: str
     judge_model: str
+    guesser_prompt_set: str
+    guesser_initial_prompt_path: Path | None
+    guesser_turn_prompt_path: Path | None
     guesser_thinking_level: str | None
     judge_thinking_level: str | None
     guesser_thinking_budget: int | None
@@ -63,6 +66,23 @@ def parse_args() -> BenchmarkConfig:
     parser.add_argument("--guesser-model", default=DEFAULT_GUESSER_MODEL, help="Guesser model id.")
     parser.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL, help="Judge model id.")
     parser.add_argument(
+        "--guesser-prompt-set",
+        default=DEFAULT_GUESSER_PROMPT_SET,
+        help="Built-in guesser prompt set name, or a custom label when using prompt-path overrides.",
+    )
+    parser.add_argument(
+        "--guesser-initial-prompt-path",
+        type=Path,
+        default=None,
+        help="Optional path to a custom initial guesser prompt.",
+    )
+    parser.add_argument(
+        "--guesser-turn-prompt-path",
+        type=Path,
+        default=None,
+        help="Optional path to a custom per-turn guesser prompt.",
+    )
+    parser.add_argument(
         "--guesser-thinking-level",
         choices=THINKING_LEVEL_CHOICES,
         default=None,
@@ -92,6 +112,9 @@ def parse_args() -> BenchmarkConfig:
         budget=_validate_budget(args.budget),
         guesser_model=args.guesser_model,
         judge_model=args.judge_model,
+        guesser_prompt_set=args.guesser_prompt_set,
+        guesser_initial_prompt_path=args.guesser_initial_prompt_path,
+        guesser_turn_prompt_path=args.guesser_turn_prompt_path,
         guesser_thinking_level=args.guesser_thinking_level,
         judge_thinking_level=args.judge_thinking_level,
         guesser_thinking_budget=args.guesser_thinking_budget,
@@ -117,6 +140,13 @@ def _initial_status(config: BenchmarkConfig, targets: list[dict[str, Any]], benc
         "budget": config.budget,
         "guesser_provider": guesser_provider,
         "guesser_model": config.guesser_model,
+        "guesser_prompt_set": config.guesser_prompt_set,
+        "guesser_initial_prompt_path": (
+            str(config.guesser_initial_prompt_path) if config.guesser_initial_prompt_path else None
+        ),
+        "guesser_turn_prompt_path": (
+            str(config.guesser_turn_prompt_path) if config.guesser_turn_prompt_path else None
+        ),
         "judge_provider": judge_provider,
         "judge_model": config.judge_model,
         "targets_total": len(targets),
@@ -150,6 +180,13 @@ def _aggregate(config: BenchmarkConfig, benchmark_dir: Path, results: list[dict[
         "budget": config.budget,
         "guesser_provider": guesser_provider,
         "guesser_model": config.guesser_model,
+        "guesser_prompt_set": config.guesser_prompt_set,
+        "guesser_initial_prompt_path": (
+            str(config.guesser_initial_prompt_path) if config.guesser_initial_prompt_path else None
+        ),
+        "guesser_turn_prompt_path": (
+            str(config.guesser_turn_prompt_path) if config.guesser_turn_prompt_path else None
+        ),
         "judge_provider": judge_provider,
         "judge_model": config.judge_model,
         "targets_total": len(results),
@@ -189,6 +226,13 @@ def main() -> int:
         "budget": config.budget,
         "guesser_provider": provider_for_model(config.guesser_model),
         "guesser_model": config.guesser_model,
+        "guesser_prompt_set": config.guesser_prompt_set,
+        "guesser_initial_prompt_path": (
+            str(config.guesser_initial_prompt_path) if config.guesser_initial_prompt_path else None
+        ),
+        "guesser_turn_prompt_path": (
+            str(config.guesser_turn_prompt_path) if config.guesser_turn_prompt_path else None
+        ),
         "judge_provider": provider_for_model(config.judge_model),
         "judge_model": config.judge_model,
         "targets": [target["id"] for target in targets],
@@ -230,6 +274,9 @@ def main() -> int:
                 guesser_reasoning=guesser_reasoning,
                 judge_reasoning=judge_reasoning,
                 run_dir=runs_dir,
+                guesser_prompt_set=config.guesser_prompt_set,
+                guesser_initial_prompt_path=config.guesser_initial_prompt_path,
+                guesser_turn_prompt_path=config.guesser_turn_prompt_path,
             ),
             target=target,
             runs_dir=runs_dir,

@@ -48,8 +48,68 @@ class SingleTargetSuiteTests(unittest.TestCase):
         self.assertEqual(config.suite_name, "place-paris")
         self.assertEqual(config.target_ids, ("place_paris",))
         self.assertEqual(config.variants[0].judge_model, "gemini-3-flash-preview")
+        self.assertEqual(config.variants[0].guesser_prompt_set, "default")
         self.assertEqual(config.variants[0].guesser_reasoning_effort, "medium")
         self.assertEqual(config.variants[0].repetitions, 10)
+
+    def test_load_suite_config_supports_prompt_set_and_custom_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            prompts_dir = Path(tmpdir) / "prompts"
+            prompts_dir.mkdir()
+            (prompts_dir / "initial.txt").write_text("Ask one question.", encoding="utf-8")
+            (prompts_dir / "turn.txt").write_text("Output only the question.", encoding="utf-8")
+            config_path = Path(tmpdir) / "suite.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "suite_name": "prompt-ablation",
+                        "targets": ["place_paris"],
+                        "budget": 40,
+                        "repetitions": 2,
+                        "judge_model": "gemini-3-flash-preview",
+                        "guesser_prompt_set": "strategic",
+                        "variants": [
+                            {
+                                "label": "custom-v1",
+                                "guesser_model": "gpt-5.4",
+                                "guesser_prompt_set": "custom-v1",
+                                "guesser_initial_prompt_path": "prompts/initial.txt",
+                                "guesser_turn_prompt_path": "prompts/turn.txt",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            config = load_suite_config(config_path)
+
+        self.assertEqual(config.variants[0].guesser_prompt_set, "custom-v1")
+        self.assertTrue(str(config.variants[0].guesser_initial_prompt_path).endswith("prompts\\initial.txt"))
+        self.assertTrue(str(config.variants[0].guesser_turn_prompt_path).endswith("prompts\\turn.txt"))
+
+    def test_load_suite_config_rejects_duplicate_variant_labels(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "suite.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "suite_name": "duplicate-labels",
+                        "targets": ["place_paris"],
+                        "budget": 40,
+                        "repetitions": 1,
+                        "judge_model": "gemini-3-flash-preview",
+                        "variants": [
+                            {"label": "same", "guesser_model": "gpt-5.4"},
+                            {"label": "same", "guesser_model": "gpt-5.4-mini"},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "Variant labels must be unique"):
+                load_suite_config(config_path)
 
     def test_aggregate_results_groups_by_target_and_variant(self) -> None:
         config = SingleTargetSuiteConfig(
@@ -61,6 +121,9 @@ class SingleTargetSuiteTests(unittest.TestCase):
                 ModelVariant(
                     label="gemini-2.5-flash",
                     guesser_model="gemini-2.5-flash",
+                    guesser_prompt_set="default",
+                    guesser_initial_prompt_path=None,
+                    guesser_turn_prompt_path=None,
                     guesser_reasoning_effort="medium",
                     judge_model="gemini-3-flash-preview",
                     judge_reasoning_effort="medium",
@@ -73,6 +136,7 @@ class SingleTargetSuiteTests(unittest.TestCase):
                 "target_id": "place_paris",
                 "variant_label": "gemini-2.5-flash",
                 "guesser_model": "gemini-2.5-flash",
+                "guesser_prompt_set": "default",
                 "judge_model": "gemini-3-flash-preview",
                 "guesser_reasoning_effort": "medium",
                 "judge_reasoning_effort": "medium",
@@ -85,6 +149,7 @@ class SingleTargetSuiteTests(unittest.TestCase):
                 "target_id": "place_paris",
                 "variant_label": "gemini-2.5-flash",
                 "guesser_model": "gemini-2.5-flash",
+                "guesser_prompt_set": "default",
                 "judge_model": "gemini-3-flash-preview",
                 "guesser_reasoning_effort": "medium",
                 "judge_reasoning_effort": "medium",
@@ -122,6 +187,7 @@ class SingleTargetSuiteTests(unittest.TestCase):
                     "target_id": "place_paris",
                     "variant_label": "gemini-3.0-flash",
                     "guesser_model": "gemini-3-flash-preview",
+                    "guesser_prompt_set": "strategic",
                     "judge_model": "gemini-3-flash-preview",
                     "runs_total": 2,
                     "runs_solved": 1,
@@ -139,7 +205,10 @@ class SingleTargetSuiteTests(unittest.TestCase):
         report = render_report(config, aggregate)
 
         self.assertIn("# Single-Target Suite Report: suite", report)
-        self.assertIn("| place_paris | gemini-3.0-flash | gemini-3-flash-preview |", report)
+        self.assertIn(
+            "| place_paris | gemini-3.0-flash | gemini-3-flash-preview | strategic | gemini-3-flash-preview |",
+            report,
+        )
 
     def test_default_suite_dir_omits_target_ids_from_folder_name(self) -> None:
         config = SingleTargetSuiteConfig(
@@ -181,6 +250,9 @@ class SingleTargetSuiteTests(unittest.TestCase):
             variant = ModelVariant(
                 label="gemini-3.1-flash-lite",
                 guesser_model="gemini-3.1-flash-lite-preview",
+                guesser_prompt_set="default",
+                guesser_initial_prompt_path=None,
+                guesser_turn_prompt_path=None,
                 guesser_reasoning_effort=None,
                 judge_model="gpt-5.4-mini",
                 judge_reasoning_effort=None,

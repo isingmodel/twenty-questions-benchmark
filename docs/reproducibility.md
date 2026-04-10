@@ -101,7 +101,7 @@ This is separate from the checked-in `results/results.csv` file currently used b
 When reporting benchmark results:
 
 - cite the suite config that produced them
-- keep the reported target set, budget, repetitions, judge model, and reasoning settings explicit
+- keep the reported target set, budget, repetitions, judge model, guesser prompt set, and reasoning settings explicit
 - say whether the claim comes from a suite aggregate, a checked-in CSV snapshot, or another derived artifact
 - prefer generated `report.md` and `aggregate.json` over hand-maintained summary tables when discussing suite outputs
 - avoid claiming a result bundle exists unless the corresponding artifact path is actually present

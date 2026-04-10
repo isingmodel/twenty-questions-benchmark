@@ -22,6 +22,7 @@ LABEL_MAP: dict[str, str] = {
     "gpt-5.4_high": "GPT-5.4 (high)",
     "gpt-5.4-mini_low": "GPT-5.4 Mini (low)",
     "gpt-5.4-mini_high": "GPT-5.4 Mini (high)",
+    "gpt-5.4-mini_low_strategic": "GPT-5.4 Mini (low, strategic)",
     "gemini-3-flash-preview": "Gemini 3 Flash",
     "gemini-3-flash-preview_low": "Gemini 3 Flash (low)",
     "gemini-3-flash-preview_high": "Gemini 3 Flash (high)",

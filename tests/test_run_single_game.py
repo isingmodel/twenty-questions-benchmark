@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from unittest.mock import patch
 import tempfile
@@ -242,6 +243,7 @@ class FullGameHelpersTests(unittest.TestCase):
         self.assertFalse(summary["solved"])
         self.assertFalse(summary["final_question_correct"])
         self.assertEqual(summary["final_question"], question)
+        self.assertEqual(summary["guesser_prompt_set"], "default")
 
     def test_run_full_game_solves_only_when_judge_marks_direct_target_guess(self) -> None:
         question = "Is the hidden target Busan?"
@@ -281,3 +283,57 @@ class FullGameHelpersTests(unittest.TestCase):
         self.assertTrue(summary["solved"])
         self.assertTrue(summary["final_question_correct"])
         self.assertEqual(summary["final_question"], question)
+        self.assertEqual(summary["guesser_prompt_set"], "default")
+
+    def test_run_full_game_supports_custom_guesser_prompt_paths(self) -> None:
+        question = "Is it a place?"
+        judge_output = (
+            '{"label":"No","reason":"The target is not a place.","question_type":"non_identity","direct_target_guess":false}'
+        )
+
+        class FakeGuesserSession:
+            session_mode = "fake-guesser"
+
+        def fake_call_model(_client: object, method_name: str, **kwargs: object) -> tuple[object, int]:
+            self.assertEqual(method_name, "generate_turn")
+            return ((question, "turn prompt", "req-1", None), 7)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            initial_prompt_path = Path(tmpdir) / "custom-initial.txt"
+            turn_prompt_path = Path(tmpdir) / "custom-turn.txt"
+            initial_prompt_path.write_text("Ask one question.", encoding="utf-8")
+            turn_prompt_path.write_text("Output only the question.", encoding="utf-8")
+
+            with (
+                patch("twentyq.episode_runner._create_client_for_model", return_value=object()),
+                patch("twentyq.episode_runner._create_guesser_session", return_value=FakeGuesserSession()),
+                patch("twentyq.episode_runner._call_model", side_effect=fake_call_model),
+                patch("twentyq.episode_runner._call_stateless_model", return_value=(judge_output, 5)),
+            ):
+                exit_code, summary = run_full_game_episode(
+                    config=FullGameConfig(
+                        target_id="animal_octopus",
+                        budget=1,
+                        guesser_model="gpt-5.4",
+                        judge_model="gpt-5.4-mini",
+                        guesser_reasoning=ReasoningConfig(),
+                        judge_reasoning=ReasoningConfig(),
+                        run_dir=None,
+                        guesser_prompt_set="custom-v1",
+                        guesser_initial_prompt_path=initial_prompt_path,
+                        guesser_turn_prompt_path=turn_prompt_path,
+                    ),
+                    target={"id": "animal_octopus", "name": "Octopus", "domain": "animals", "aliases": []},
+                    runs_dir=Path(tmpdir),
+                )
+
+            run_config_path = Path(summary["run_dir"]) / "run_config.json"
+            run_config = json.loads(run_config_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(summary["guesser_prompt_set"], "custom-v1")
+        self.assertEqual(summary["guesser_prompt_source"], "custom")
+        self.assertTrue(summary["guesser_initial_prompt_path"].endswith("custom-initial.txt"))
+        self.assertTrue(summary["guesser_turn_prompt_path"].endswith("custom-turn.txt"))
+        self.assertEqual(run_config["config"]["guesser_prompt_set"], "custom-v1")
+        self.assertEqual(run_config["config"]["guesser_prompt_source"], "custom")

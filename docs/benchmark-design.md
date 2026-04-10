@@ -22,18 +22,21 @@ This is useful for comparing behavior inside a fixed protocol. It should not be 
 ## What Is Fixed
 
 - target records from [`data/all_target.csv`](../data/all_target.csv)
-- prompt templates in [`prompts/`](../prompts/)
+- judge prompt templates in [`prompts/`](../prompts/)
 - the no-separate-final-guess game rule
 - run logging and aggregation formats
 
 ## What Can Vary
 
 - guesser model
+- guesser prompt set
 - judge model
 - target subset
 - repetition count
 - turn budget
 - model-specific reasoning settings
+
+The checked-in leaderboard snapshot in the README uses the default guesser prompt set. The code now also supports prompt ablations by swapping the guesser scaffold while keeping the rest of the protocol fixed.
 
 Reasoning settings are intentionally abstracted at the suite/config level. Depending on the model family, the same nominal effort may resolve to provider-specific controls such as OpenAI `reasoning_effort`, Gemini `thinking_level`, or Anthropic and Gemini `thinking_budget`.
 

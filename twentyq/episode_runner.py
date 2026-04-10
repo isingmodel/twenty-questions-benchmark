@@ -17,7 +17,13 @@ from .clients import (
     OpenAIResponsesSession,
 )
 from .env import get_required_env, get_required_env_any
-from .prompts import ROOT, load_prompt, render_template
+from .prompts import (
+    DEFAULT_GUESSER_PROMPT_SET,
+    ROOT,
+    load_guesser_prompts,
+    load_prompt,
+    render_template,
+)
 from .reasoning import ReasoningConfig
 from .run_logs import RunLogger
 
@@ -188,6 +194,9 @@ class FullGameConfig:
     guesser_reasoning: ReasoningConfig
     judge_reasoning: ReasoningConfig
     run_dir: Path | None
+    guesser_prompt_set: str = DEFAULT_GUESSER_PROMPT_SET
+    guesser_initial_prompt_path: Path | None = None
+    guesser_turn_prompt_path: Path | None = None
 
 
 def _utc_now() -> str:
@@ -552,8 +561,13 @@ def run_full_game_episode(
         guesser_provider=guesser_provider,
         guesser_model=config.guesser_model,
     )
-    guesser_initial = load_prompt("guesser-initial.txt")
-    guesser_turn_template = load_prompt("guesser-turn.txt")
+    guesser_prompts = load_guesser_prompts(
+        prompt_set=config.guesser_prompt_set,
+        initial_prompt_path=config.guesser_initial_prompt_path,
+        turn_prompt_path=config.guesser_turn_prompt_path,
+    )
+    guesser_initial = guesser_prompts.initial_prompt
+    guesser_turn_template = guesser_prompts.turn_prompt
     judge_system = load_prompt("judge-system.txt")
     judge_turn_template = load_prompt("judge-turn-template.txt")
 
@@ -568,6 +582,10 @@ def run_full_game_episode(
                 "guesser_provider": guesser_provider,
                 "guesser_model": config.guesser_model,
                 "guesser_reasoning": _reasoning_to_payload(config.guesser_reasoning),
+                "guesser_prompt_set": guesser_prompts.name,
+                "guesser_prompt_source": guesser_prompts.source,
+                "guesser_initial_prompt_path": guesser_prompts.initial_prompt_path,
+                "guesser_turn_prompt_path": guesser_prompts.turn_prompt_path,
                 "judge_provider": judge_provider,
                 "judge_model": config.judge_model,
                 "judge_reasoning": _reasoning_to_payload(config.judge_reasoning),
@@ -587,6 +605,10 @@ def run_full_game_episode(
                 "guesser_provider": guesser_provider,
                 "guesser_model": config.guesser_model,
                 "guesser_reasoning": _reasoning_to_payload(config.guesser_reasoning),
+                "guesser_prompt_set": guesser_prompts.name,
+                "guesser_prompt_source": guesser_prompts.source,
+                "guesser_initial_prompt_path": guesser_prompts.initial_prompt_path,
+                "guesser_turn_prompt_path": guesser_prompts.turn_prompt_path,
                 "judge_provider": judge_provider,
                 "judge_model": config.judge_model,
                 "judge_reasoning": _reasoning_to_payload(config.judge_reasoning),
@@ -650,6 +672,10 @@ def run_full_game_episode(
                     "latency_ms": guesser_latency_ms,
                     "session_mode": guesser_session.session_mode,
                     "system_prompt": "",
+                    "prompt_set": guesser_prompts.name,
+                    "prompt_source": guesser_prompts.source,
+                    "initial_prompt_path": guesser_prompts.initial_prompt_path,
+                    "turn_prompt_path": guesser_prompts.turn_prompt_path,
                     "user_prompt": guesser_user_prompt,
                     "turn_prompt": turn_prompt,
                     "raw_output": guesser_raw_output,
@@ -744,6 +770,10 @@ def run_full_game_episode(
             "target_name": target["name"],
             "target_domain": target["domain"],
             "budget": config.budget,
+            "guesser_prompt_set": guesser_prompts.name,
+            "guesser_prompt_source": guesser_prompts.source,
+            "guesser_initial_prompt_path": guesser_prompts.initial_prompt_path,
+            "guesser_turn_prompt_path": guesser_prompts.turn_prompt_path,
             "turns": turns,
             "outcome": outcome,
         }
@@ -754,6 +784,10 @@ def run_full_game_episode(
             "mode": "full-game-test",
             "target_id": target["id"],
             "target_name": target["name"],
+            "guesser_prompt_set": guesser_prompts.name,
+            "guesser_prompt_source": guesser_prompts.source,
+            "guesser_initial_prompt_path": guesser_prompts.initial_prompt_path,
+            "guesser_turn_prompt_path": guesser_prompts.turn_prompt_path,
             "solved": outcome["solved"],
             "turns_used": outcome["turns_used"],
             "final_question": outcome["final_question"],
@@ -801,6 +835,10 @@ def run_full_game_episode(
             "mode": "full-game-test",
             "target_id": target["id"],
             "target_name": target["name"],
+            "guesser_prompt_set": guesser_prompts.name,
+            "guesser_prompt_source": guesser_prompts.source,
+            "guesser_initial_prompt_path": guesser_prompts.initial_prompt_path,
+            "guesser_turn_prompt_path": guesser_prompts.turn_prompt_path,
             "solved": False,
             "turns_used": len(turns),
             "final_question": outcome["final_question"],
